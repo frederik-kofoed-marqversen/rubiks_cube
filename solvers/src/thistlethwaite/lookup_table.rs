@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use std::marker::PhantomData;
 
 pub struct LookupTable<S> {
-    pub data: Box<[u8]>,
+    data: Box<[u8]>,
     stage: PhantomData<S>
 }
 

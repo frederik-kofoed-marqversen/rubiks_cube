@@ -135,6 +135,13 @@ impl Cube {
         }
     }
 
+    pub fn apply_moves(&mut self, moves: &[Move]) -> &mut Self {
+        for turn in moves {
+            self.turn(turn);
+        }
+        self
+    }
+
     fn u(&mut self) -> &mut Self {
         self.edges.swap(Edge::UR as usize, Edge::UB as usize);
         self.edges.swap(Edge::UB as usize, Edge::UL as usize);

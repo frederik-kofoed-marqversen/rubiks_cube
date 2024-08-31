@@ -71,8 +71,8 @@ impl<'a> Stage<'a> for G2 {
     }
 }
 
-pub struct G3;
-impl<'a> Stage<'a> for G3 {
+pub struct G3Pochmann;
+impl<'a> Stage<'a> for G3Pochmann {
     const FILEPATH: &'a str = &"./data/g3.dat";
     const SIZE: usize = 352800;
     const MOVE_POOL: &'a [Move] = &[
@@ -282,47 +282,12 @@ fn permutation_parity<T: PartialEq>(permutation: &[T], initial: &[T]) -> bool {
     return parity
 }
 
-fn paired_combination_index(corner_positions: &Vec<u8>, mut positions: Vec<u8>) -> usize {
-    let pair = &corner_positions[0..2];
-    let pair_index1 = combination_rank(pair, &positions);
-    positions.retain(|pos| !pair.contains(pos));
-
-    let pair = &corner_positions[2..4];
-    let pair_index2 = combination_rank(pair, &positions);
-    
-    let corner_pairs_index = pair_index1 * binom(4, 2) + pair_index2;
-    return corner_pairs_index
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test1() {
-        let mut res = vec![vec![0;6];90];
-        for i in 0..6 {
-            for j in i+1..6 {
-                for k in 0..6 {
-                    for l in k+1..6 {
-                        if [i, j].contains(&k) || [i, j].contains(&l) {continue;}
-                        for m in 0..6 {
-                            for n in m+1..6 {
-                                if [i, j, k, l].contains(&m) || [i, j, k, l].contains(&n) {continue;}
-                                let list = vec![i, j, k, l, m, n];
-                                let index = paired_combination_index(&list, (0..6).collect());
-                                assert_eq!(res[index], vec![0;6]);
-                                // dbg!(&list, &index);
-                                res[index] = list;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        // dbg!(&res[90 - 6*1 - 1..90 - 6*0]);
-        assert!(!res.contains(&vec![0;6]));
-
-        assert_eq!(permutation_parity(&[1,2,4,3], &[2,1,3,4]), false);
+        
     }
 }
