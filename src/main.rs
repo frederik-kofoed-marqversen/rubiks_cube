@@ -11,10 +11,14 @@ fn main() {
     let mut cube = Cube::new();
     cube.apply_moves(&scramble);
     
-    // Create solver with tables (will load from disk or build if not found)
-    let solver = ThistlethwaiteSolver::new()
-        .with_tables(ThistlethwaiteSolver::DEFAULT_DATA_DIR)
-        .expect("Failed to initialize solver tables");
+    // // Create solver with tables (will load from disk or build if not found)
+    // let solver = ThistlethwaiteSolver::new()
+    //     .with_tables(ThistlethwaiteSolver::DEFAULT_DATA_DIR)
+    //     .expect("Failed to initialize solver tables");
+
+    let mut solver = ThistlethwaiteSolver::new();
+    solver.build_tables().expect("Failed to build tables");
+    solver.save_tables(ThistlethwaiteSolver::DEFAULT_DATA_DIR).expect("Failed to save tables");
     
     // Solve
     let solution = solver.solve(&cube);

@@ -2,6 +2,7 @@ use super::stages::Stage;
 use super::cube::Cube;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
+use std::collections::VecDeque;
 
 pub struct LookupTable<S> {
     data: Box<[u8]>,
@@ -9,12 +10,11 @@ pub struct LookupTable<S> {
 }
 
 impl<'a, S: Stage<'a>> LookupTable<S> {
-    /// Build a lookup table from scratch using IDDFS
-    /// This is a slow operation but saves memory compared to BFS
+    /// Build a lookup table from scratch using BFS (fast, recommended)
     pub fn build() -> Self {
         println!("Building lookup table for stage (size: {})...", S::SIZE);
         Self {
-            data: Self::build_table(),
+            data: Self::build_table_bfs(),
             stage: PhantomData
         }
     }
@@ -51,52 +51,38 @@ impl<'a, S: Stage<'a>> LookupTable<S> {
         self.data[S::indexer(cube)]
     }
 
-    /**Compute lookup table from scratch by Iterative Deepening Depth First Search (IDDFS). Although 
-     * slow, this is done to save on memory since the width in a Breadth First Search would be large.
-     */
-    fn build_table() -> Box<[u8]> {
-        // `result` will hold the minimum distance (number of turns) from a solved cube
-        // to any configuration of edge orientations
+    /// Compute lookup table using Breadth First Search (BFS)
+    fn build_table_bfs() -> Box<[u8]> {
         let mut result = vec![u8::MAX; S::SIZE];
-        let mut num_items = 0;
-
-        // Initialise the root
-        result[S::indexer(&Cube::new())] = 0;
-        num_items += 1;
-
-        let mut depth_limit = 0;
-        while num_items < S::SIZE {
-            depth_limit += 1;
-            println!("  Depth {}: {} states remaining", depth_limit, S::SIZE - num_items);
-
-            let mut queue = vec![(Cube::new(), 0)];
-            while let Some((parent, parent_depth)) = queue.pop() {
-                for turn in S::MOVE_POOL.iter() {
-                    let mut child = parent.clone();
-                    child.turn(turn);
-                    let index = S::indexer(&child);
-                    let depth = parent_depth + 1;
-
-                    if result[index] < depth {
-                        // child can be reached at a shallower depth, so don't add it to the queue
-                        continue;
-                    }
-
-                    if depth == depth_limit {
-                        if result[index] > depth {
-                            // This is the first time child is encountered, so record its depth
-                            num_items += 1;
-                            result[index] = depth;
-                        }
-                        // Child is at current depth limit, so don't add it to the queue
-                        continue;
-                    }
-
-                    // Continue branch
-                    queue.push((child, depth));
+        let mut queue = VecDeque::new();
+        
+        // Start from solved cube
+        let solved = Cube::new();
+        result[S::indexer(&solved)] = 0;
+        queue.push_back((solved, 0));
+        
+        let mut num_items = 1;
+        let mut last_depth = 0;
+        
+        while let Some((cube, depth)) = queue.pop_front() {
+            if depth > last_depth {
+                last_depth = depth;
+                println!("  Depth {}: {} states found", depth, num_items);
+            }
+            
+            for turn in S::MOVE_POOL.iter() {
+                let mut child = cube.clone();
+                child.turn(turn);
+                let index = S::indexer(&child);
+                
+                if result[index] == u8::MAX {  // Not visited yet
+                    result[index] = depth + 1;
+                    num_items += 1;
+                    queue.push_back((child, depth + 1));
                 }
             }
         }
+        
         println!("  Completed!");
         result.into()
     }
