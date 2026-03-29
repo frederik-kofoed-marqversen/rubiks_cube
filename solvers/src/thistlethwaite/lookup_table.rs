@@ -21,25 +21,6 @@ impl<'a, S: Stage<'a>> LookupTable<S> {
 
     /// Load a precomputed lookup table from a file
     pub fn load(file_path: &str) -> Result<Self, std::io::Error> {
-        let data = Self::load_data_from_file(file_path)?;
-        Ok(Self { data, stage: PhantomData })
-    }
-
-    /// Save this lookup table to a file
-    pub fn save(&self, file_path: &str) -> Result<(), std::io::Error> {
-        // Create parent directory if it doesn't exist
-        if let Some(parent) = std::path::Path::new(file_path).parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        self.save_data_to_file(file_path)
-    }
-
-    /// Evaluate the minimum number of moves from this cube state to the goal
-    pub fn eval(&self, cube: &Cube) -> u8 {
-        self.data[S::indexer(cube)]
-    }
-
-    fn load_data_from_file(file_path: &str) -> Result<Box<[u8]>, std::io::Error> {
         let mut file = std::fs::File::open(file_path)?;
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer)?;
@@ -51,13 +32,23 @@ impl<'a, S: Stage<'a>> LookupTable<S> {
             ))
         }
         
-        Ok(buffer.into())
+        Ok(Self { data: buffer.into(), stage: PhantomData })
     }
 
-    fn save_data_to_file(&self, file_path: &str) -> Result<(), std::io::Error> {
+    /// Save this lookup table to a file
+    pub fn save(&self, file_path: &str) -> Result<(), std::io::Error> {
+        // Create parent directory if it doesn't exist
+        if let Some(parent) = std::path::Path::new(file_path).parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         let mut file = std::fs::File::create(file_path)?;
         file.write_all(&self.data)?;
         Ok(())
+    }
+
+    /// Evaluate the minimum number of moves from this cube state to the goal
+    pub fn eval(&self, cube: &Cube) -> u8 {
+        self.data[S::indexer(cube)]
     }
 
     /**Compute lookup table from scratch by Iterative Deepening Depth First Search (IDDFS). Although 
