@@ -9,30 +9,37 @@ pub struct LookupTable<S> {
 }
 
 impl<'a, S: Stage<'a>> LookupTable<S> {
-    pub fn new(data_file: Option<&str>) -> Self {
-        match data_file {
-            None => {
-                return Self {data: Self::build_table(), stage: PhantomData}
-            },
-            Some(file_path) => {
-                match Self::load_data_from_file(file_path) {
-                    Ok(data) => return Self {data: data, stage: PhantomData},
-                    Err(_) => {
-                        let table = Self::new(None);
-                        table.save_data_to_file(file_path).unwrap();
-                        return table
-                    }
-                }
-            }
+    /// Build a lookup table from scratch using IDDFS
+    /// This is a slow operation but saves memory compared to BFS
+    pub fn build() -> Self {
+        println!("Building lookup table for stage (size: {})...", S::SIZE);
+        Self {
+            data: Self::build_table(),
+            stage: PhantomData
         }
     }
 
+    /// Load a precomputed lookup table from a file
+    pub fn load(file_path: &str) -> Result<Self, std::io::Error> {
+        let data = Self::load_data_from_file(file_path)?;
+        Ok(Self { data, stage: PhantomData })
+    }
+
+    /// Save this lookup table to a file
+    pub fn save(&self, file_path: &str) -> Result<(), std::io::Error> {
+        // Create parent directory if it doesn't exist
+        if let Some(parent) = std::path::Path::new(file_path).parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        self.save_data_to_file(file_path)
+    }
+
+    /// Evaluate the minimum number of moves from this cube state to the goal
     pub fn eval(&self, cube: &Cube) -> u8 {
         self.data[S::indexer(cube)]
     }
 
     fn load_data_from_file(file_path: &str) -> Result<Box<[u8]>, std::io::Error> {
-        // load from file
         let mut file = std::fs::File::open(file_path)?;
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer)?;
@@ -40,14 +47,14 @@ impl<'a, S: Stage<'a>> LookupTable<S> {
         if buffer.len() != S::SIZE {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "Save file seems to be corrupt."
+                format!("Expected {} bytes, got {}. File may be corrupt.", S::SIZE, buffer.len())
             ))
-        } else {
-            return Ok(buffer.into())
         }
+        
+        Ok(buffer.into())
     }
 
-    pub fn save_data_to_file(&self, file_path: &str) -> Result<(), std::io::Error> {
+    fn save_data_to_file(&self, file_path: &str) -> Result<(), std::io::Error> {
         let mut file = std::fs::File::create(file_path)?;
         file.write_all(&self.data)?;
         Ok(())
@@ -69,7 +76,7 @@ impl<'a, S: Stage<'a>> LookupTable<S> {
         let mut depth_limit = 0;
         while num_items < S::SIZE {
             depth_limit += 1;
-            dbg!(&depth_limit, S::SIZE - num_items);
+            println!("  Depth {}: {} states remaining", depth_limit, S::SIZE - num_items);
 
             let mut queue = vec![(Cube::new(), 0)];
             while let Some((parent, parent_depth)) = queue.pop() {
@@ -99,43 +106,7 @@ impl<'a, S: Stage<'a>> LookupTable<S> {
                 }
             }
         }
-        return result.into()
+        println!("  Completed!");
+        result.into()
     }
 }
-
-/* // Alternative implementations using a constant filepath for storing binary
-impl<'a, S: Stage<'a>> LookupTable<S> {
-    pub fn new() -> Self {
-        match Self::load_data_from_file() {
-            Ok(data) => return Self {data: data, stage: PhantomData},
-            Err(_) => {
-                let data = Self::build_table();
-                let table = Self {data: data, stage: PhantomData};
-                table.save_data_to_file().unwrap();
-                return table
-            }
-        }
-    }
-
-    fn load_data_from_file() -> Result<Box<[u8]>, std::io::Error> {
-        // load from file
-        let mut file = std::fs::File::open(S::FILEPATH)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-
-        if buffer.len() != S::SIZE {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Save file seems to be corrupt."
-            ))
-        } else {
-            return Ok(buffer.into())
-        }
-    }
-
-    fn save_data_to_file(&self) -> Result<(), std::io::Error> {
-        let mut file = std::fs::File::create(S::FILEPATH)?;
-        file.write_all(&self.data)?;
-        Ok(())
-    }
-} */

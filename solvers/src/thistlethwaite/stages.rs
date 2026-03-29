@@ -1,7 +1,6 @@
 use super::cube::{Cube, Move, Edge, Corner, EDGES, CORNERS};
 
 pub trait Stage<'a> {
-    const FILEPATH: &'a str;
     const MOVE_POOL: &'a [Move];
     const SIZE: usize;
     fn indexer(cube: &Cube) -> usize;
@@ -9,7 +8,6 @@ pub trait Stage<'a> {
 
 pub struct G1;
 impl<'a> Stage<'a> for G1 {
-    const FILEPATH: &'a str = &"./data/g1.dat";
     const SIZE: usize = 2048;
     const MOVE_POOL: &'a [Move] = &[
         Move::U, Move::Up, Move::U2,
@@ -36,7 +34,6 @@ impl<'a> Stage<'a> for G1 {
 
 pub struct G2;
 impl<'a> Stage<'a> for G2 {
-    const FILEPATH: &'a str = &"./data/g2.dat";
     const SIZE: usize = 1082565;
     const MOVE_POOL: &'a [Move] = &[
         Move::U, Move::Up, Move::U2,
@@ -73,7 +70,6 @@ impl<'a> Stage<'a> for G2 {
 
 pub struct G3Pochmann;
 impl<'a> Stage<'a> for G3Pochmann {
-    const FILEPATH: &'a str = &"./data/g3.dat";
     const SIZE: usize = 352800;
     const MOVE_POOL: &'a [Move] = &[
         Move::U, Move::Up, Move::U2,
@@ -144,7 +140,6 @@ impl<'a> Stage<'a> for G3Pochmann {
 
 pub struct G4;
 impl<'a> Stage<'a> for G4 {
-    const FILEPATH: &'a str = &"./data/g4.dat";
     const SIZE: usize = 663552;
     const MOVE_POOL: &'a [Move] = &[
         Move::U2,
@@ -225,6 +220,7 @@ fn binom(n: usize, k: usize) -> usize {
  * from Wendy Myrvold, Frank Ruskey, Ranking and unranking permutations in linear time, 
  * Information Processing Letters, Volume 79, Issue 6, 2001, Pages 281-284,
  */
+#[allow(dead_code)]
 fn permutation_rank_recursive<T: PartialEq>(permutation: &[T], initial: &[T]) -> usize {
     let pi: Vec<usize> = permutation.iter()
         .map(|x| initial.iter().position(|y| x == y).unwrap())
