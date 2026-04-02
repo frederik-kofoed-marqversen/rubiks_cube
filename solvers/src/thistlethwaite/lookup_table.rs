@@ -1,6 +1,5 @@
 use super::stages::Stage;
 use super::cube::Cube;
-use std::any::type_name;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::collections::VecDeque;
@@ -71,7 +70,7 @@ impl<S: Stage> LookupTable<S> {
                 println!("  Depth {depth}");
             }
             
-            for turn in S::MOVE_POOL.iter() {
+            for &turn in S::MOVE_POOL.iter() {
                 let mut child = cube;
                 child.turn(turn);
                 let index = S::indexer(&child);

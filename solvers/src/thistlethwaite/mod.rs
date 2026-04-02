@@ -1,4 +1,5 @@
 use super::cube;
+use super::solver::Solver;
 
 mod lookup_table;
 mod stages;

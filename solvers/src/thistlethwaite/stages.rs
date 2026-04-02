@@ -109,7 +109,7 @@ impl Stage for G1 {
         EDGES[..11]
             .iter()
             .enumerate()
-            .map(|(i, edge)| (cube.get_edge_orientation(edge) as usize) << i)
+            .map(|(i, &edge)| (cube.get_edge_orientation(edge) as usize) << i)
             .sum()
     }
 }
@@ -159,14 +159,14 @@ impl Stage for G2 {
         
         // Compute corner orientation index as base-3 number
         let corner_orientations = CORNERS[..7].iter()
-            .map(|corner| cube.get_corner_orientation(corner));
+            .map(|&corner| cube.get_corner_orientation(corner));
         let corner_orientation_index = corner_orientations.enumerate()
             .map(|(i, n)| POWERS_OF_3[i] * n as usize)
             .sum::<usize>();
 
         // Find which 4 positions currently contain the E-slice edges
         const E_SLICE_EDGES: [Edge; 4] = [Edge::RF, Edge::RB, Edge::LB, Edge::LF];
-        let e_slice_edge_positions = E_SLICE_EDGES.map(|edge| *cube.get_edge_position(&edge));
+        let e_slice_edge_positions = E_SLICE_EDGES.map(|edge| cube.get_edge_position(edge));
         let e_slice_edges_index = combination_rank(&e_slice_edge_positions, &EDGES);
 
         let index = corner_orientation_index * 495 + e_slice_edges_index;
@@ -227,7 +227,7 @@ impl Stage for G3Pochmann {
             Corner::URB, Corner::ULF,  // Pair 2
             Corner::DRF, Corner::DLB,  // Pair 3
         ];
-        let corner_positions = PAIRED_CORNERS.map(|pos| *cube.get_corner_position(&pos));
+        let corner_positions = PAIRED_CORNERS.map(|pos| cube.get_corner_position(pos));
         
         // Track which positions each pair occupies using combination ranks
         let mut positions = Vec::from(PAIRED_CORNERS);
@@ -255,7 +255,7 @@ impl Stage for G3Pochmann {
         // E-slice already fixed in G2, S-slice determined once E and M are placed
         const REMAINING_EDGES: [Edge; 8] = [Edge::UF, Edge::DF, Edge::DB, Edge::UB, Edge::UR, Edge::UL, Edge::DL, Edge::DR];
         const M_SLICE_EDGES: [Edge; 4] = [Edge::UF, Edge::DF, Edge::DB, Edge::UB];
-        let m_slice_edge_positions = M_SLICE_EDGES.map(|edge| *cube.get_edge_position(&edge));
+        let m_slice_edge_positions = M_SLICE_EDGES.map(|edge| cube.get_edge_position(edge));
         let m_slice_edge_index = combination_rank(&m_slice_edge_positions, &REMAINING_EDGES);  // (8 choose 4) = 70
 
         return (corner_pairs_index * 70 + m_slice_edge_index) * 2 + parity as usize
@@ -303,14 +303,14 @@ impl Stage for G4 {
         // Corner index: permutation of first tetrad × position of one corner in second tetrad
         // First tetrad: 4! = 24 permutations
         let tetrad = [Corner::URF, Corner::ULB, Corner::DRB, Corner::DLF];
-        let positions = tetrad.map(|corner| *cube.get_corner_position(&corner));
+        let positions = tetrad.map(|corner| cube.get_corner_position(corner));
         let tetrad_index = permutation_rank(&positions, &tetrad);  // 0..23
     
         // Second tetrad: just track URB's position (other 3 determined by first tetrad)
         let tetrad = [Corner::URB, Corner::ULF, Corner::DRF, Corner::DLB];
-        let position = cube.get_corner_position(&Corner::URB);
+        let position = cube.get_corner_position(Corner::URB);
         let urb_index = tetrad.iter()
-            .position(|corner| corner == position)
+            .position(|&corner| corner == position)
             .unwrap();  // 0..3
     
         let corner_index = tetrad_index * 4 + urb_index;  // 0..95  // 0..95
@@ -318,19 +318,19 @@ impl Stage for G4 {
         // Edge index: permutations within each of the 3 slices
         // E-slice (middle layer): 4! = 24 permutations
         let slice = [Edge::RF, Edge::RB, Edge::LB, Edge::LF];
-        let positions = slice.map(|edge| *cube.get_edge_position(&edge));
+        let positions = slice.map(|edge| cube.get_edge_position(edge));
         let e_slice_index = permutation_rank(&positions, &slice);  // 0..23
     
         // M-slice (front-back): 4! = 24 permutations
         let slice = [Edge::UF, Edge::DF, Edge::DB, Edge::UB];
-        let positions = slice.map(|edge| *cube.get_edge_position(&edge));
+        let positions = slice.map(|edge| cube.get_edge_position(edge));
         let m_slice_index = permutation_rank(&positions, &slice);  // 0..23
 
         // S-slice (left-right): partial permutation
         // Track which 2 of 4 positions hold UR and UL, plus their relative order
         let slice = [Edge::UR, Edge::UL, Edge::DL, Edge::DR];
         let partial_permutation: Vec<usize> = [Edge::UR, Edge::UL].iter()
-            .map(|edge| *cube.get_edge_position(&edge))
+            .map(|&edge| cube.get_edge_position(edge))
             .map(|edge| slice.iter().position(|&x| x == edge).unwrap())
             .collect();
         // (4 choose 2) = 6 positions, × 2 orderings = 12 configurations

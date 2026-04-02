@@ -12,9 +12,9 @@ fn main() {
     cube.apply_moves(&scramble);
     
     // Initialise solver
-    // let tables = ThistlethwaiteTables::load_or_build(ThistlethwaiteTables::DEFAULT_DIR)
-    //     .expect("Failed to initialize tables");
-    // // let tables = ThistlethwaiteTables::build();
+    // // let tables = ThistlethwaiteTables::load_or_build(ThistlethwaiteTables::DEFAULT_DIR)
+    // //     .expect("Failed to initialize tables");
+    // let tables = ThistlethwaiteTables::build();
     // let solver = LookupTableSolver::new(tables);
     let solver = BDBFSSolver::new();
     

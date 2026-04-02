@@ -1,8 +1,8 @@
 use super::lookup_table::LookupTable;
 use super::stages::{G3Pochmann, Stage, G1, G2, G4};
 use super::ThistlethwaiteTables;
-use crate::cube::{Cube, Move};
-use crate::solver::Solver;
+use super::cube::{Cube, Move};
+use super::Solver;
 use std::collections::{HashMap, VecDeque};
 
 pub struct LookupTableSolver {
@@ -19,14 +19,14 @@ impl LookupTableSolver {
         let mut steps = table.eval(&cube);
 
         while steps > 0 {
-            for turn in T::MOVE_POOL {
+            for &turn in T::MOVE_POOL {
                 let mut temp = cube.clone();
                 temp.turn(turn);
                 let new_steps = table.eval(&temp);
                 if new_steps < steps {
                     cube.turn(turn);
                     steps = new_steps;
-                    solution.push(*turn);
+                    solution.push(turn);
                     break;
                 }
             }
@@ -63,13 +63,13 @@ fn expand_frontier<T: Stage>(
     if let Some(current) = queue.pop_front() {
         let current_id: u32 = T::id(&current);
 
-        for turn in T::MOVE_POOL {
+        for &turn in T::MOVE_POOL {
             let mut next = current;
             next.turn(turn);
             let next_id = T::id(&next);
 
             if !this_map.contains_key(&next_id) {
-                this_map.insert(next_id, (current_id, Some(*turn)));
+                this_map.insert(next_id, (current_id, Some(turn)));
                 queue.push_back(next);
 
                 if reverse_map.contains_key(&next_id) {
