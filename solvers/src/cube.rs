@@ -64,6 +64,7 @@ struct Cubie<T> {
 }
 
 impl Cubie<Edge> {
+    #[inline]
     fn flip(&mut self) {
         // Addition mod 2
         self.orientation ^= 1;
@@ -71,6 +72,7 @@ impl Cubie<Edge> {
 }
 
 impl Cubie<Corner> {
+    #[inline]
     fn rotate(&mut self, amount: u8) {
         // Addition mod 3
         const MOD3: [u8; 5] = [0, 1, 2, 0, 1];
@@ -110,26 +112,32 @@ impl Cube {
         return true
     }
 
+    #[inline]
     pub fn get_edge_orientation(&self, pos: Edge) -> u8 {
         self.edges[pos as usize].orientation
     }
 
+    #[inline]
     pub fn get_edge_type(&self, pos: Edge) -> Edge {
         self.edges[pos as usize].piece_type
     }
 
+    #[inline]
     pub fn get_edge_position(&self, edge: Edge) -> Edge {
         self.edge_pos[edge as usize]
     }
 
+    #[inline]
     pub fn get_corner_orientation(&self, pos: Corner) -> u8 {
         self.corners[pos as usize].orientation
     }
 
+    #[inline]
     pub fn get_corner_type(&self, pos: Corner) -> Corner {
         self.corners[pos as usize].piece_type
     }
 
+    #[inline]
     pub fn get_corner_position(&self, corner: Corner) -> Corner {
         self.corner_pos[corner as usize]
     }
