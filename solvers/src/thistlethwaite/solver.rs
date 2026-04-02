@@ -57,16 +57,16 @@ impl Solver for LookupTableSolver {
 // BFS expansion for one frontier, returns connection to reverse frontier if found
 fn expand_frontier<T: Stage>(
     queue: &mut VecDeque<Cube>,
-    this_map: &mut HashMap<usize, (usize, Option<Move>)>,
-    reverse_map: &HashMap<usize, (usize, Option<Move>)>,
-) -> Option<usize> {
+    this_map: &mut HashMap<u32, (u32, Option<Move>)>,
+    reverse_map: &HashMap<u32, (u32, Option<Move>)>,
+) -> Option<u32> {
     if let Some(current) = queue.pop_front() {
-        let current_id: usize = T::indexer(&current);
+        let current_id: u32 = T::id(&current);
 
         for turn in T::MOVE_POOL {
             let mut next = current;
             next.turn(turn);
-            let next_id = T::indexer(&next);
+            let next_id = T::id(&next);
 
             if !this_map.contains_key(&next_id) {
                 this_map.insert(next_id, (current_id, Some(*turn)));
@@ -83,9 +83,9 @@ fn expand_frontier<T: Stage>(
 
 // Reconstruct the path from start to goal using the forward and backward maps
 fn reconstruct_path<T: Stage>(
-    connection: usize,
-    forward_map: &HashMap<usize, (usize, Option<Move>)>,
-    backward_map: &HashMap<usize, (usize, Option<Move>)>,
+    connection: u32,
+    forward_map: &HashMap<u32, (u32, Option<Move>)>,
+    backward_map: &HashMap<u32, (u32, Option<Move>)>,
 ) -> Vec<Move> {
     let mut path = Vec::new();
 
@@ -117,15 +117,15 @@ impl BDBFSSolver {
     // Bi-directional BFS solver for a single stage
     fn solve_stage<T: Stage>(cube: &mut Cube) -> Vec<Move> {
         let solved = Cube::new();
-        let start_id = T::indexer(cube);
-        let goal_id = T::indexer(&solved);
+        let start_id = T::id(cube);
+        let goal_id = T::id(&solved);
 
         if start_id == goal_id {
             return vec![]; // Already in goal class!
         }
 
-        let mut forward: HashMap<usize, (usize, Option<Move>)> = HashMap::new();
-        let mut backward: HashMap<usize, (usize, Option<Move>)> = HashMap::new();
+        let mut forward: HashMap<u32, (u32, Option<Move>)> = HashMap::new();
+        let mut backward: HashMap<u32, (u32, Option<Move>)> = HashMap::new();
 
         forward.insert(start_id, (start_id, None));
         backward.insert(goal_id, (goal_id, None));
@@ -183,15 +183,15 @@ impl BFSSolver {
     // Bi-directional BFS solver for a single stage
     fn solve_stage<T: Stage>(cube: &mut Cube) -> Vec<Move> {
         let solved = Cube::new();
-        let start_id = T::indexer(cube);
-        let goal_id = T::indexer(&solved);
+        let start_id = T::id(cube);
+        let goal_id = T::id(&solved);
 
         if start_id == goal_id {
             return vec![]; // Already in goal class!
         }
 
-        let mut map: HashMap<usize, (usize, Option<Move>)> = HashMap::new();
-        let mut goal_map: HashMap<usize, (usize, Option<Move>)> = HashMap::new();
+        let mut map: HashMap<u32, (u32, Option<Move>)> = HashMap::new();
+        let mut goal_map: HashMap<u32, (u32, Option<Move>)> = HashMap::new();
 
         map.insert(start_id, (start_id, None));
         goal_map.insert(goal_id, (goal_id, None));

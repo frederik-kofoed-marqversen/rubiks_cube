@@ -55,6 +55,17 @@ pub trait Stage {
     /// storage in dense lookup tables. Each equivalence class gets a unique index.
     fn indexer(cube: &Cube) -> usize;
 
+    /// Compute a identifier unique for each equivalence class.
+    /// 
+    /// Returns a unique integer for each equivalence class, but unlike `indexer`,
+    /// the ID doesn't need to be in a specific range or be densely packed.
+    /// 
+    /// **Use case**: Keys for hash maps where dense packing isn't needed.
+    /// Some algorithms use simpler/faster ID functions that produce larger integers.
+    fn id(cube: &Cube) -> u32 {
+        Self::indexer(cube) as u32
+    }
+
     fn name() -> &'static str {
         std::any::type_name::<Self>().rsplit("::").next().unwrap()
     }
