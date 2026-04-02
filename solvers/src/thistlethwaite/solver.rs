@@ -1,42 +1,23 @@
-use super::{LookupTable, Stage, G1, G2, G3Pochmann, G4};
+use super::lookup_table::LookupTable;
+use super::stages::{G3Pochmann, Stage, G1, G2, G4};
+use super::ThistlethwaiteTables;
 use crate::cube::{Cube, Move};
 use crate::solver::Solver;
+use std::collections::{HashMap, VecDeque};
 
-pub struct ThistlethwaiteSolver {
-    table1: Option<LookupTable<G1>>,
-    table2: Option<LookupTable<G2>>,
-    table3: Option<LookupTable<G3Pochmann>>,
-    table4: Option<LookupTable<G4>>,
+pub struct LookupTableSolver {
+    tables: ThistlethwaiteTables,
 }
 
-impl ThistlethwaiteSolver {
-    /// Create a new uninitialized solver
-    /// Call `with_tables()`, `load_tables()`, or `build_tables()` before solving
-    pub fn new() -> Self {
-        Self {
-            table1: None,
-            table2: None,
-            table3: None,
-            table4: None,
-        }
+impl LookupTableSolver {
+    pub fn new(tables: ThistlethwaiteTables) -> Self {
+        Self { tables }
     }
-    
-    /// Default data directory for precomputed tables (in target/ to avoid committing to repo)
-    pub const DEFAULT_DATA_DIR: &'static str = "./target/data/thistlethwaite";
-    
-    fn table_paths(data_dir: &str) -> [String; 4] {
-        [
-            format!("{}/g1.dat", data_dir),
-            format!("{}/g2.dat", data_dir),
-            format!("{}/g3.dat", data_dir),
-            format!("{}/g4.dat", data_dir),
-        ]
-    }
-    
-    fn solve_stage<'a, T: Stage<'a>>(&self, cube: &mut Cube, table: &LookupTable<T>) -> Vec<Move> {
+
+    fn solve_stage<T: Stage>(&self, cube: &mut Cube, table: &LookupTable<T>) -> Vec<Move> {
         let mut solution = Vec::new();
         let mut steps = table.eval(&cube);
-        
+
         while steps > 0 {
             for turn in T::MOVE_POOL {
                 let mut temp = cube.clone();
@@ -50,73 +31,200 @@ impl ThistlethwaiteSolver {
                 }
             }
         }
-        
+
         solution
     }
 }
 
-impl Solver for ThistlethwaiteSolver {
+impl Solver for LookupTableSolver {
     fn solve(&self, cube: &Cube) -> Vec<Move> {
-        assert!(self.is_ready(), 
-            "Solver not ready - call load_tables(), build_tables(), or with_tables() first");
-        
         let mut cube = cube.clone();
         let mut solution = Vec::new();
-        
-        solution.append(&mut self.solve_stage(&mut cube, self.table1.as_ref().unwrap()));
-        solution.append(&mut self.solve_stage(&mut cube, self.table2.as_ref().unwrap()));
-        solution.append(&mut self.solve_stage(&mut cube, self.table3.as_ref().unwrap()));
-        solution.append(&mut self.solve_stage(&mut cube, self.table4.as_ref().unwrap()));
-        
+
+        solution.append(&mut self.solve_stage(&mut cube, &self.tables.g1));
+        solution.append(&mut self.solve_stage(&mut cube, &self.tables.g2));
+        solution.append(&mut self.solve_stage(&mut cube, &self.tables.g3));
+        solution.append(&mut self.solve_stage(&mut cube, &self.tables.g4));
+
         solution
     }
-    
-    fn build_tables(&mut self) -> Result<(), std::io::Error> {
-        println!("Building G1 table...");
-        self.table1 = Some(LookupTable::<G1>::build());
-        
-        println!("Building G2 table...");
-        self.table2 = Some(LookupTable::<G2>::build());
-        
-        println!("Building G3 table...");
-        self.table3 = Some(LookupTable::<G3Pochmann>::build());
-        
-        println!("Building G4 table...");
-        self.table4 = Some(LookupTable::<G4>::build());
-        
-        Ok(())
-    }
-    
-    fn load_tables(&mut self, data_dir: &str) -> Result<(), std::io::Error> {
-        let paths = Self::table_paths(data_dir);
-        
-        self.table1 = Some(LookupTable::<G1>::load(&paths[0])?);
-        self.table2 = Some(LookupTable::<G2>::load(&paths[1])?);
-        self.table3 = Some(LookupTable::<G3Pochmann>::load(&paths[2])?);
-        self.table4 = Some(LookupTable::<G4>::load(&paths[3])?);
-        
-        Ok(())
-    }
-    
-    fn save_tables(&self, data_dir: &str) -> Result<(), std::io::Error> {
-        let paths = Self::table_paths(data_dir);
-        
-        self.table1.as_ref().unwrap().save(&paths[0])?;
-        self.table2.as_ref().unwrap().save(&paths[1])?;
-        self.table3.as_ref().unwrap().save(&paths[2])?;
-        self.table4.as_ref().unwrap().save(&paths[3])?;
-        
-        Ok(())
-    }
-    
-    fn is_ready(&self) -> bool {
-        self.table1.is_some() && 
-        self.table2.is_some() && 
-        self.table3.is_some() && 
-        self.table4.is_some()
-    }
-    
+
     fn name(&self) -> &str {
-        "Thistlethwaite (Greedy)"
+        "Thistlethwaite's Algorithm (greedy lookup table)"
+    }
+}
+
+// BFS expansion for one frontier, returns connection to reverse frontier if found
+fn expand_frontier<T: Stage>(
+    queue: &mut VecDeque<Cube>,
+    this_map: &mut HashMap<usize, (usize, Option<Move>)>,
+    reverse_map: &HashMap<usize, (usize, Option<Move>)>,
+) -> Option<usize> {
+    if let Some(current) = queue.pop_front() {
+        let current_id: usize = T::indexer(&current);
+
+        for turn in T::MOVE_POOL {
+            let mut next = current;
+            next.turn(turn);
+            let next_id = T::indexer(&next);
+
+            if !this_map.contains_key(&next_id) {
+                this_map.insert(next_id, (current_id, Some(*turn)));
+                queue.push_back(next);
+
+                if reverse_map.contains_key(&next_id) {
+                    return Some(next_id);
+                }
+            }
+        }
+    }
+    None
+}
+
+// Reconstruct the path from start to goal using the forward and backward maps
+fn reconstruct_path<T: Stage>(
+    connection: usize,
+    forward_map: &HashMap<usize, (usize, Option<Move>)>,
+    backward_map: &HashMap<usize, (usize, Option<Move>)>,
+) -> Vec<Move> {
+    let mut path = Vec::new();
+
+    // Reconstruct forward path
+    let mut current_id = connection;
+    while let Some((previous_id, Some(mv))) = forward_map.get(&current_id) {
+        path.push(*mv);
+        current_id = *previous_id;
+    }
+    path.reverse();
+
+    // Reconstruct backward path
+    let mut current_id = connection;
+    while let Some((previous_id, Some(mv))) = backward_map.get(&current_id) {
+        path.push(mv.inverse());
+        current_id = *previous_id;
+    }
+
+    path
+}
+
+pub struct BDBFSSolver;
+
+impl BDBFSSolver {
+    pub fn new() -> Self {
+        Self
+    }
+
+    // Bi-directional BFS solver for a single stage
+    fn solve_stage<T: Stage>(cube: &mut Cube) -> Vec<Move> {
+        let solved = Cube::new();
+        let start_id = T::indexer(cube);
+        let goal_id = T::indexer(&solved);
+
+        if start_id == goal_id {
+            return vec![]; // Already in goal class!
+        }
+
+        let mut forward: HashMap<usize, (usize, Option<Move>)> = HashMap::new();
+        let mut backward: HashMap<usize, (usize, Option<Move>)> = HashMap::new();
+
+        forward.insert(start_id, (start_id, None));
+        backward.insert(goal_id, (goal_id, None));
+
+        // Two queues
+        let mut forward_queue = VecDeque::from([*cube]);
+        let mut backward_queue = VecDeque::from([solved]);
+        let connection;
+        loop {
+            // Expand forward frontier
+            if let Some(c) = expand_frontier::<T>(&mut forward_queue, &mut forward, &backward) {
+                connection = c;
+                break;
+            }
+
+            // Expand backward frontier
+            if let Some(c) = expand_frontier::<T>(&mut backward_queue, &mut backward, &forward) {
+                connection = c;
+                break;
+            }
+        }
+
+        let solution = reconstruct_path::<T>(connection, &forward, &backward);
+        cube.apply_moves(&solution);
+        return solution;
+    }
+}
+
+impl Solver for BDBFSSolver {
+    fn solve(&self, cube: &Cube) -> Vec<Move> {
+        let mut cube = cube.clone();
+        let mut solution = Vec::new();
+
+        solution.append(&mut Self::solve_stage::<G1>(&mut cube));
+        solution.append(&mut Self::solve_stage::<G2>(&mut cube));
+        solution.append(&mut Self::solve_stage::<G3Pochmann>(&mut cube));
+        solution.append(&mut Self::solve_stage::<G4>(&mut cube));
+        solution.append(&mut Self::solve_stage::<G4>(&mut cube));
+
+        solution
+    }
+
+    fn name(&self) -> &str {
+        "Thistlethwaite's Algorithm (bidirectional BFS)"
+    }
+}
+
+pub struct BFSSolver;
+
+impl BFSSolver {
+    pub fn new() -> Self {
+        Self
+    }
+
+    // Bi-directional BFS solver for a single stage
+    fn solve_stage<T: Stage>(cube: &mut Cube) -> Vec<Move> {
+        let solved = Cube::new();
+        let start_id = T::indexer(cube);
+        let goal_id = T::indexer(&solved);
+
+        if start_id == goal_id {
+            return vec![]; // Already in goal class!
+        }
+
+        let mut map: HashMap<usize, (usize, Option<Move>)> = HashMap::new();
+        let mut goal_map: HashMap<usize, (usize, Option<Move>)> = HashMap::new();
+
+        map.insert(start_id, (start_id, None));
+        goal_map.insert(goal_id, (goal_id, None));
+
+        let mut queue = VecDeque::from([*cube]);
+        loop {
+            // Expand forward frontier
+            if expand_frontier::<T>(&mut queue, &mut map, &goal_map).is_some() {
+                break;
+            }
+        }
+
+        let solution = reconstruct_path::<T>(goal_id, &map, &goal_map);
+        cube.apply_moves(&solution);
+        return solution;
+    }
+}
+
+impl Solver for BFSSolver {
+    fn solve(&self, cube: &Cube) -> Vec<Move> {
+        let mut cube = cube.clone();
+        let mut solution = Vec::new();
+
+        solution.append(&mut Self::solve_stage::<G1>(&mut cube));
+        solution.append(&mut Self::solve_stage::<G2>(&mut cube));
+        solution.append(&mut Self::solve_stage::<G3Pochmann>(&mut cube));
+        solution.append(&mut Self::solve_stage::<G4>(&mut cube));
+        solution.append(&mut Self::solve_stage::<G4>(&mut cube));
+
+        solution
+    }
+
+    fn name(&self) -> &str {
+        "Thistlethwaite's Algorithm (BFS)"
     }
 }

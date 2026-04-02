@@ -1,5 +1,6 @@
 use super::stages::Stage;
 use super::cube::Cube;
+use std::any::type_name;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::collections::VecDeque;
@@ -9,10 +10,10 @@ pub struct LookupTable<S> {
     stage: PhantomData<S>
 }
 
-impl<'a, S: Stage<'a>> LookupTable<S> {
+impl<S: Stage> LookupTable<S> {
     /// Build a lookup table from scratch using BFS (fast, recommended)
     pub fn build() -> Self {
-        println!("Building lookup table for stage (size: {})...", S::SIZE);
+        println!("Building lookup table for stage {} (size: {})...", S::name(), S::SIZE);
         Self {
             data: Self::build_table_bfs(),
             stage: PhantomData
@@ -67,11 +68,11 @@ impl<'a, S: Stage<'a>> LookupTable<S> {
         while let Some((cube, depth)) = queue.pop_front() {
             if depth > last_depth {
                 last_depth = depth;
-                println!("  Depth {}: {} states found", depth, num_items);
+                println!("  Depth {depth}");
             }
             
             for turn in S::MOVE_POOL.iter() {
-                let mut child = cube.clone();
+                let mut child = cube;
                 child.turn(turn);
                 let index = S::indexer(&child);
                 
@@ -82,8 +83,9 @@ impl<'a, S: Stage<'a>> LookupTable<S> {
                 }
             }
         }
+
+        assert_eq!(num_items, S::SIZE, "BFS did not fill the entire table! Only filled {num_items} out of {} entries.", S::SIZE);
         
-        println!("  Completed!");
         result.into()
     }
 }

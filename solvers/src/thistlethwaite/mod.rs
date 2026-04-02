@@ -2,8 +2,8 @@ use super::cube;
 
 mod lookup_table;
 mod stages;
+mod tables;
 mod solver;
 
-pub use lookup_table::LookupTable;
-pub use stages::{G1, G2, G3Pochmann, G4, Stage};
-pub use solver::ThistlethwaiteSolver;
+pub use tables::ThistlethwaiteTables;
+pub use solver::{LookupTableSolver, BFSSolver, BDBFSSolver};

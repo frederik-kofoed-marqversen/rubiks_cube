@@ -32,6 +32,31 @@ pub enum Move {
     B, Bp, B2,
 }
 
+impl Move {
+    pub fn inverse(&self) -> Self {
+        match self {
+            Move::U => Move::Up,
+            Move::Up => Move::U,
+            Move::U2 => Move::U2,
+            Move::L => Move::Lp,
+            Move::Lp => Move::L,
+            Move::L2 => Move::L2,
+            Move::D => Move::Dp,
+            Move::Dp => Move::D,
+            Move::D2 => Move::D2,
+            Move::R => Move::Rp,
+            Move::Rp => Move::R,
+            Move::R2 => Move::R2,
+            Move::F => Move::Fp,
+            Move::Fp => Move::F,
+            Move::F2 => Move::F2,
+            Move::B => Move::Bp,
+            Move::Bp => Move::B,
+            Move::B2 => Move::B2,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 struct Cubie<T> {
     piece_type: T,
@@ -40,23 +65,16 @@ struct Cubie<T> {
 
 impl Cubie<Edge> {
     fn flip(&mut self) {
-        if self.orientation == 1 {
-            self.orientation = 0;
-        } else {
-            self.orientation = 1;
-        }
+        // Addition mod 2
+        self.orientation ^= 1;
     }
 }
 
 impl Cubie<Corner> {
     fn rotate(&mut self, amount: u8) {
-        // When amount is 0, 1, or 2, this is addition mod 3
-        self.orientation += amount;
-        if self.orientation == 3 {
-            self.orientation = 0;
-        } else if self.orientation == 4 {
-            self.orientation = 1;
-        }
+        // Addition mod 3
+        const MOD3: [u8; 5] = [0, 1, 2, 0, 1];
+        self.orientation = MOD3[(self.orientation + amount) as usize];
     }
 }
 

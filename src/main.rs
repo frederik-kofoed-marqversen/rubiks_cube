@@ -1,6 +1,6 @@
 extern crate solvers;
 use solvers::Solver;
-use solvers::thistlethwaite::ThistlethwaiteSolver;
+use solvers::thistlethwaite::{LookupTableSolver, ThistlethwaiteTables, BFSSolver, BDBFSSolver};
 use solvers::cube::Cube;
 use solvers::cube::Move::*;
 
@@ -11,14 +11,12 @@ fn main() {
     let mut cube = Cube::new();
     cube.apply_moves(&scramble);
     
-    // // Create solver with tables (will load from disk or build if not found)
-    // let solver = ThistlethwaiteSolver::new()
-    //     .with_tables(ThistlethwaiteSolver::DEFAULT_DATA_DIR)
-    //     .expect("Failed to initialize solver tables");
-
-    let mut solver = ThistlethwaiteSolver::new();
-    solver.build_tables().expect("Failed to build tables");
-    solver.save_tables(ThistlethwaiteSolver::DEFAULT_DATA_DIR).expect("Failed to save tables");
+    // Initialise solver
+    // let tables = ThistlethwaiteTables::load_or_build(ThistlethwaiteTables::DEFAULT_DIR)
+    //     .expect("Failed to initialize tables");
+    // // let tables = ThistlethwaiteTables::build();
+    // let solver = LookupTableSolver::new(tables);
+    let solver = BDBFSSolver::new();
     
     // Solve
     let solution = solver.solve(&cube);
