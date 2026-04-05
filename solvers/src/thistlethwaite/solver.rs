@@ -37,8 +37,7 @@ impl LookupTableSolver {
 }
 
 impl Solver for LookupTableSolver {
-    fn solve(&self, cube: &Cube) -> Vec<Move> {
-        let mut cube = cube.clone();
+    fn solve(&self, mut cube: Cube) -> Vec<Move> {
         let mut solution = Vec::new();
 
         solution.append(&mut self.solve_stage(&mut cube, &self.tables.g1));
@@ -155,8 +154,7 @@ impl BDBFSSolver {
 }
 
 impl Solver for BDBFSSolver {
-    fn solve(&self, cube: &Cube) -> Vec<Move> {
-        let mut cube = cube.clone();
+    fn solve(&self, mut cube: Cube) -> Vec<Move> {
         let mut solution = Vec::new();
 
         solution.append(&mut Self::solve_stage::<G1>(&mut cube));
@@ -211,8 +209,7 @@ impl BFSSolver {
 }
 
 impl Solver for BFSSolver {
-    fn solve(&self, cube: &Cube) -> Vec<Move> {
-        let mut cube = cube.clone();
+    fn solve(&self, mut cube: Cube) -> Vec<Move> {
         let mut solution = Vec::new();
 
         solution.append(&mut Self::solve_stage::<G1>(&mut cube));

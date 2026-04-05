@@ -22,7 +22,7 @@ pub const CORNERS: [Corner; 8] = [
     Corner::DRB, Corner::DRF, Corner::DLF, Corner::DLB,
 ];
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Move {
     U, Up, U2,
     L, Lp, L2,
@@ -62,6 +62,35 @@ impl Move {
             Move::B => Move::Bp,
             Move::Bp => Move::B,
             Move::B2 => Move::B2,
+        }
+    }
+
+    pub fn face(&self) -> Face {
+        match self {
+            Move::U | Move::Up | Move::U2 => Face::U,
+            Move::L | Move::Lp | Move::L2 => Face::L,
+            Move::D | Move::Dp | Move::D2 => Face::D,
+            Move::R | Move::Rp | Move::R2 => Face::R,
+            Move::F | Move::Fp | Move::F2 => Face::F,
+            Move::B | Move::Bp | Move::B2 => Face::B,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Face {
+    U, D, L, R, F, B,
+}
+
+impl Face {
+    pub fn opposite(&self) -> Self {
+        match self {
+            Face::U => Face::D,
+            Face::D => Face::U,
+            Face::L => Face::R,
+            Face::R => Face::L,
+            Face::F => Face::B,
+            Face::B => Face::F,
         }
     }
 }

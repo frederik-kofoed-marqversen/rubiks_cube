@@ -1,4 +1,4 @@
-use super::cube::{Corner, Cube, Edge, CORNERS, EDGES};
+use super::cube::{Cube, Edge, CORNERS, EDGES};
 use crate::math::precompute_binomials;
 
 const BINOM: [[usize; 5]; 13] = precompute_binomials();
@@ -146,25 +146,31 @@ mod tests {
 
     #[test]
     fn eo_indexing() {
+        assert_eq!(EO::to_index(&Cube::solved()), 0);
+        
         for i in 0..EO::SIZE {
             let test = EO::to_index(&EO::from_index(i));
-            assert_eq!(i, test, "Edge Orientation Indexing failed for index {i}");
+            assert_eq!(i, test, "Failed for index {i}");
         }
     }
 
     #[test]
     fn co_indexing() {
+        assert_eq!(CO::to_index(&Cube::solved()), 0);
+        
         for i in 0..CO::SIZE {
             let test = CO::to_index(&CO::from_index(i));
-            assert_eq!(i, test, "Corner Orientation Indexing failed for index {i}");
+            assert_eq!(i, test, "Failed for index {i}");
         }
     }
 
     #[test]
     fn es_indexing() {
+        assert_eq!(ES::to_index(&Cube::solved()), 0);
+
         for i in 0..ES::SIZE {
             let test = ES::to_index(&ES::from_index(i));
-            assert_eq!(i, test, "E-Slice Indexing failed for index {i}");
+            assert_eq!(i, test, "Failed for index {i}");
         }
     }
 }

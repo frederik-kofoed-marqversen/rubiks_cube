@@ -1,0 +1,157 @@
+use super::table::LookupTable2D;
+use super::indexers::{CornerOrientationIndexer, ESliceIndexer, EdgeOrientationIndexer, Indexer};
+use super::cube::{Move, MOVES};
+
+pub type MoveTable = LookupTable2D<u16, 18>;
+
+impl MoveTable {
+    #[inline]
+    pub fn get(&self, idx: usize, mv: Move) -> u16 {
+        self.data[idx * 18 + mv as usize]
+    }
+
+    #[inline]
+    fn set(&mut self, idx: usize, mv: Move, val: u16) {
+        self.data[idx * 18 + mv as usize] = val;
+    }
+
+    pub fn build<F: Indexer>() -> Self {
+        let mut table = Self::new(F::SIZE, u16::MAX);
+        for idx1 in 0..F::SIZE {
+            for mv in MOVES {
+                let mut cube = F::from_index(idx1);
+                cube.turn(mv);
+                table.set(idx1, mv, F::to_index(&cube) as u16);
+            }
+        }
+        table
+    }
+}
+
+pub type PruningTable<const IDX2_WIDTH: usize> = LookupTable2D<u8, IDX2_WIDTH>;
+
+impl<const IDX2_WIDTH: usize> PruningTable<IDX2_WIDTH> {
+    #[inline]
+    pub fn get(&self, idx1: usize, idx2: usize) -> u8 {
+        self.data[idx1 * IDX2_WIDTH + idx2]
+    }
+
+    #[inline]
+    fn set(&mut self, idx1: usize, idx2: usize, val: u8) {
+        self.data[idx1 * IDX2_WIDTH + idx2] = val;
+    }
+
+    pub fn build(table1: &MoveTable, table2: &MoveTable) -> Self {
+        let mut table = Self::new(table1.idx1_width(), u8::MAX);
+        let mut queue = std::collections::VecDeque::new();
+
+        // Starting from solved state.
+        // Assuming both indexers return 0 for the solved cube
+        const SOLVED: (usize, usize) = (0, 0);
+        table.set(SOLVED.0, SOLVED.1, 0); // Distance to solved state is 0
+        queue.push_back(SOLVED); // (idx1, idx2)
+
+        while let Some((idx1, idx2)) = queue.pop_front() {
+            let dist = table.get(idx1, idx2);
+            for mv in MOVES {
+                let next_idx1 = table1.get(idx1, mv) as usize;
+                let next_idx2 = table2.get(idx2, mv) as usize;
+
+                if table.get(next_idx1, next_idx2) == u8::MAX {
+                    table.set(next_idx1, next_idx2, dist + 1);
+                    queue.push_back((next_idx1, next_idx2));
+                }
+            }
+        }
+
+        table
+    }
+}
+
+pub struct KociembaTables {
+    // Phase 1
+    pub eo_move: MoveTable,
+    pub co_move: MoveTable,
+    pub es_move: MoveTable,
+
+    pub eo_es_prune: PruningTable<{ ESliceIndexer::SIZE }>,
+    pub co_es_prune: PruningTable<{ ESliceIndexer::SIZE }>,
+    // // Phase 2
+    // pub cp_move: MoveTable,
+    // pub ep_move: MoveTable,
+    // pub ud_move: MoveTable,
+
+    // pub cp_ep_prune: PruningTable<...>,
+}
+
+impl KociembaTables {
+    pub const DEFAULT_PATH: &'static str = "target/kociemba_tables.bin";
+
+    pub fn load_or_build(path: &str) -> Result<Self, std::io::Error> {
+        if std::path::Path::new(path).exists() {
+            Self::load(path)
+        } else {
+            let tables = Self::build();
+            tables.save(path)?;
+            Ok(tables)
+        }
+    }
+
+    pub fn build() -> Self {
+        println!("Building Kociemba tables...");
+        println!("Edge Orientation Move Table...");
+        let eo_move = MoveTable::build::<EdgeOrientationIndexer>();
+        println!("Corner Orientation Move Table...");
+        let co_move = MoveTable::build::<CornerOrientationIndexer>();
+        println!("E-Slice Move Table...");
+        let es_move = MoveTable::build::<ESliceIndexer>();
+        println!("EO-ES Pruning Table...");
+        let eo_es_prune = PruningTable::build(&eo_move, &es_move);
+        println!("CO-ES Pruning Table...");
+        let co_es_prune = PruningTable::build(&co_move, &es_move);
+
+        Self {
+            eo_move,
+            co_move,
+            es_move,
+            eo_es_prune,
+            co_es_prune,
+        }
+    }
+
+    pub fn load(file_path: &str) -> Result<Self, std::io::Error> {
+        let file = std::fs::File::open(file_path)?;
+        let mut reader = std::io::BufReader::new(file);
+        
+        let eo_move = MoveTable::deserialize_from_reader(&mut reader)?;
+        let co_move = MoveTable::deserialize_from_reader(&mut reader)?;
+        let es_move = MoveTable::deserialize_from_reader(&mut reader)?;
+        let eo_es_prune = PruningTable::deserialize_from_reader(&mut reader)?;
+        let co_es_prune = PruningTable::deserialize_from_reader(&mut reader)?;
+
+        Ok(Self {
+            eo_move,
+            co_move,
+            es_move,
+            eo_es_prune,
+            co_es_prune,
+        })
+    }
+
+    pub fn save(&self, file_path: &str) -> Result<(), std::io::Error> {
+        if let Some(parent) = std::path::Path::new(file_path).parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        
+        let file = std::fs::File::create(file_path)?;
+        let mut writer = std::io::BufWriter::new(file);
+        
+        self.eo_move.serialize_to_writer(&mut writer)?;
+        self.co_move.serialize_to_writer(&mut writer)?;
+        self.es_move.serialize_to_writer(&mut writer)?;
+        self.eo_es_prune.serialize_to_writer(&mut writer)?;
+        self.co_es_prune.serialize_to_writer(&mut writer)?;
+        
+        Ok(())
+    }
+}
