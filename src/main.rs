@@ -8,7 +8,7 @@ fn main() {
     let scramble = vec![Rp, U2, R2, Dp, Lp, Bp, L2, Up, R2, D2, R, B2, Lp, D2, Rp, F2, B2, R, F];
     
     // Initialize scrambled cube
-    let mut cube = Cube::new();
+    let mut cube = Cube::solved();
     cube.apply_moves(&scramble);
     
     // Initialise solver
@@ -24,7 +24,7 @@ fn main() {
     println!("Solution: {:?}", solution);
     
     // Verify
-    let mut cube = Cube::new();
+    let mut cube = Cube::solved();
     cube.apply_moves(&scramble).apply_moves(&solution);
     assert!(cube.is_solved());
     println!("✓ Cube solved successfully!");

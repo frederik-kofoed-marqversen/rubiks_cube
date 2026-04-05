@@ -7,8 +7,7 @@ pub struct KociembaSolver {
 
 impl Solver for KociembaSolver {
     fn solve(&self, cube: &Cube) -> Vec<Move> {
-        // Placeholder implementation
-        vec![]
+        unimplemented!("Kociemba's algorithm is not yet implemented");
     }
 
     fn name(&self) -> &str {

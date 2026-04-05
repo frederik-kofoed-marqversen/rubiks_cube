@@ -1,4 +1,7 @@
-struct LookupTable2D<T: Copy, const IDX2_WIDTH: usize> {
+use super::cube::{Cube, MOVES};
+use super::indexers::Indexer;
+
+pub struct LookupTable2D<T: Copy, const IDX2_WIDTH: usize> {
     data: Vec<T>,
 }
 
@@ -21,5 +24,23 @@ impl<T: Copy, const IDX2_WIDTH: usize> LookupTable2D<T, IDX2_WIDTH> {
     }
 }
 
-type MoveTable = LookupTable2D<u16, 18>;
-type PruningTable<const IDX2_WIDTH: usize> = LookupTable2D<u8, IDX2_WIDTH>;
+pub type MoveTable = LookupTable2D<u16, 18>;
+pub type PruningTable<const IDX2_WIDTH: usize> = LookupTable2D<u8, IDX2_WIDTH>;
+
+impl MoveTable {
+    pub fn build<F>() -> Self
+    where
+        F: Indexer,
+    {
+        let mut table = Self::new(F::SIZE, u16::MAX);
+        for idx1 in 0..F::SIZE {
+            let mut cube = F::from_index(idx1);
+            for mv in MOVES {
+                cube.turn(mv);
+                let idx2 = F::to_index(&cube);
+                table.set(idx1, mv as usize, idx2 as u16);
+            }
+        }
+        table
+    }
+}

@@ -1,62 +1,170 @@
 use super::cube::{Corner, Cube, Edge, CORNERS, EDGES};
+use crate::math::precompute_binomials;
 
-// Edge orientation in [0, 2048) - 2^11 possible orientations
-pub fn edge_orientation_index(cube: &Cube) -> usize {
-    let mut index = 0;
-    for &pos in EDGES[..11].iter() {
-        index <<= 1;
-        index |= cube.get_edge_orientation(pos) as usize;
-    }
-    return index;
+const BINOM: [[usize; 5]; 13] = precompute_binomials();
+
+pub trait Indexer {
+    const SIZE: usize;
+
+    fn to_index(cube: &Cube) -> usize;
+    fn from_index(index: usize) -> Cube;
 }
 
-// Corner orientation in [0, 2187) - 3^7 possible orientations
-pub fn corner_orientation_index(cube: &Cube) -> usize {
-    let mut index = 0;
-    for &pos in CORNERS[..7].iter() {
-        index *= 3;
-        index += cube.get_corner_orientation(pos) as usize;
+pub struct EdgeOrientationIndexer;
+pub struct CornerOrientationIndexer;
+pub struct ESliceIndexer;
+
+impl Indexer for EdgeOrientationIndexer {
+    const SIZE: usize = 2048; // 2^11 possible orientations
+
+    fn to_index(cube: &Cube) -> usize {
+        let mut index = 0;
+        for &pos in EDGES[..11].iter() {
+            index <<= 1; // *= 2;
+            index |= cube.get_edge_orientation(pos) as usize;
+        }
+        index
     }
-    return index;
+
+    fn from_index(index: usize) -> Cube {
+        let mut cube = Cube::solved();
+
+        // Decode the 11 edge orientations from the index
+        let mut remaining_index = index;
+        let mut sum = 0;
+        for &edge in EDGES[..11].iter().rev() {
+            let bit = (remaining_index & 1) as u8;
+            cube.set_edge_orientation(edge, bit);
+            sum += bit;
+            remaining_index >>= 1;
+        }
+
+        // 12th edge orientation determined by parity (must sum to even)
+        cube.set_edge_orientation(EDGES[11], sum % 2);
+
+        cube
+    }
 }
 
-// Combination rank of the 4 edges in the E slice, in [0, 495) - (12 choose 4) possible combinations
-pub fn ud_slice_index(cube: &Cube) -> usize {
-    const E_SLICE: [Edge; 4] = [Edge::RF, Edge::RB, Edge::LB, Edge::LF];
+impl Indexer for CornerOrientationIndexer {
+    const SIZE: usize = 2187; // 3^7 possible orientations
 
-    let mut index = 0;
-    let mut r = 4;
+    fn to_index(cube: &Cube) -> usize {
+        let mut index = 0;
+        for &pos in CORNERS[..7].iter() {
+            index *= 3;
+            index += cube.get_corner_orientation(pos) as usize;
+        }
+        index
+    }
 
-    for (i, &pos) in EDGES.iter().enumerate().rev() {
-        if E_SLICE.contains(&cube.get_edge_type(pos)) {
-            r -= 1;
-        } else if r > 0 {
-            // TODO: Precompute binomial coefficients - const BINOM: [[usize; 5]; 12] = ...
-            index += binom(i, r);
+    fn from_index(index: usize) -> Cube {
+        let mut cube = Cube::solved();
+
+        // Decode the 7 corner orientations from the index (base-3 number)
+        let mut remaining_index = index;
+        let mut sum = 0;
+        for &corner in CORNERS[..7].iter().rev() {
+            let orientation = (remaining_index % 3) as u8;
+            cube.set_corner_orientation(corner, orientation);
+            sum += orientation;
+            remaining_index /= 3;
+        }
+
+        // 8th corner orientation determined by parity (must sum to 0 mod 3)
+        cube.set_corner_orientation(CORNERS[7], (3 - (sum % 3)) % 3);
+
+        cube
+    }
+}
+
+const E_SLICE: [Edge; 4] = [Edge::RF, Edge::RB, Edge::LB, Edge::LF];
+const NON_E_SLICE: [Edge; 8] = [
+    Edge::UR,
+    Edge::UB,
+    Edge::UL,
+    Edge::UF,
+    Edge::DR,
+    Edge::DB,
+    Edge::DL,
+    Edge::DF,
+];
+
+// Combination rank of the 4 edges currently in the E slice
+impl Indexer for ESliceIndexer {
+    const SIZE: usize = 495; // (12 choose 4) possible combinations
+
+    fn to_index(cube: &Cube) -> usize {
+        let mut index = 0;
+        let mut k = 0; // Number of E-slice edges found so far
+
+        for (i, &pos) in EDGES.iter().enumerate() {
+            if k == 4 {
+                break;
+            }
+
+            let edge = cube.get_edge_type(pos);
+            if E_SLICE.contains(&edge) {
+                k += 1;
+                index += BINOM[i][k];
+            }
+        }
+
+        index
+    }
+
+    fn from_index(mut index: usize) -> Cube {
+        let mut cube = Cube::solved();
+
+        let mut e_slice_iter = E_SLICE.iter();
+        let mut non_e_slice_iter = NON_E_SLICE.iter();
+        
+        let mut r = 4; // Remaining E-slice edges to place
+        for (i, &pos) in EDGES.iter().enumerate().rev() {
+            let b = BINOM[i][r];
+            if r > 0 && index >= b {
+                // This position contains an E-slice edge
+                cube.set_edge_type(pos, *e_slice_iter.next().unwrap());
+                index -= b;
+                r -= 1;
+            } else {
+                // Position contains a non E-slice edge
+                cube.set_edge_type(pos, *non_e_slice_iter.next().unwrap());
+            }
+        }
+
+        cube
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    type EO = EdgeOrientationIndexer;
+    type CO = CornerOrientationIndexer;
+    type ES = ESliceIndexer;
+
+    #[test]
+    fn eo_indexing() {
+        for i in 0..EO::SIZE {
+            let test = EO::to_index(&EO::from_index(i));
+            assert_eq!(i, test, "Edge Orientation Indexing failed for index {i}");
         }
     }
 
-    return index;
-}
-
-fn binom(n: usize, k: usize) -> usize {
-    if k > n {
-        0
-    } else {
-        (0..k).fold(1, |res, i| (res * (n - i)) / (i + 1))
+    #[test]
+    fn co_indexing() {
+        for i in 0..CO::SIZE {
+            let test = CO::to_index(&CO::from_index(i));
+            assert_eq!(i, test, "Corner Orientation Indexing failed for index {i}");
+        }
     }
-}
 
-fn factorial(n: usize) -> usize {
-    (2..=n).product()
-}
-
-fn phase1_coordinate(cube: &Cube) -> usize {
-    let edge_orient = edge_orientation_index(cube);
-    let corner_orient = corner_orientation_index(cube);
-    let ud_slice = ud_slice_index(cube);
-
-    // Combine the three coordinates into a single index
-    // We can use the fact that edge_orient is in [0, 2048), corner_orient in [0, 2187), and ud_slice in [0, 495]
-    return (edge_orient * 2187 + corner_orient) * 495 + ud_slice;
+    #[test]
+    fn es_indexing() {
+        for i in 0..ES::SIZE {
+            let test = ES::to_index(&ES::from_index(i));
+            assert_eq!(i, test, "E-Slice Indexing failed for index {i}");
+        }
+    }
 }

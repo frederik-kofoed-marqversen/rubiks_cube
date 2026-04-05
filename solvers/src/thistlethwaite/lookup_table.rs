@@ -57,7 +57,7 @@ impl<S: Stage> LookupTable<S> {
         let mut queue = VecDeque::new();
         
         // Start from solved cube
-        let solved = Cube::new();
+        let solved = Cube::solved();
         result[S::indexer(&solved)] = 0;
         queue.push_back((solved, 0));
         
