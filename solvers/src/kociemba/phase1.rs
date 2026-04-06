@@ -8,7 +8,7 @@ impl Phase1Solver {
     pub fn solve(cube: &Cube, tables: &KociembaTables) -> Vec<Move> {
         let start = Phase1State::from_cube(cube);
         let mut bound = Self::heuristic(&start, tables);
-        
+
         if bound == 0 {
             return Vec::new();
         }
@@ -17,12 +17,12 @@ impl Phase1Solver {
             if bound > 20 {
                 panic!("Failed to find a solution in Phase 1 within 20 moves");
             }
-            
+
             let mut path = Vec::new();
             if Self::dfs(start, 0, bound, tables, &mut path) {
                 return path;
             }
-            
+
             bound += 1;
         }
     }
@@ -69,17 +69,17 @@ impl Phase1Solver {
 
         let prev_face = prev.face();
         let next_face = next.face();
-        
+
         if prev_face == next_face {
             return false;
         }
-        
+
         // Only allow moves on opposite faces if they are in the correct order
         // E.g. R followed by L is allowed, but L followed by R is not, to avoid redundant sequences like R L R'
         if prev_face.opposite() == next_face {
             return prev_face < next_face;
         }
-        
+
         true
     }
 }
@@ -114,9 +114,9 @@ impl Phase1State {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::LazyLock;
-    use super::*;
     use super::Move::*;
+    use super::*;
+    use std::sync::LazyLock;
 
     static TABLES: LazyLock<KociembaTables> = LazyLock::new(KociembaTables::build);
 
@@ -128,12 +128,12 @@ mod tests {
     }
 
     #[test]
-    fn phase1_simple_scramble() {        
+    fn phase1_simple_scramble() {
         let mut cube = Cube::solved();
         cube.turn(F);
-        
+
         let solution = Phase1Solver::solve(&cube, &TABLES);
-        
+
         // Verify solution
         cube.apply_moves(&solution);
         let state = Phase1State::from_cube(&cube);
@@ -141,14 +141,14 @@ mod tests {
     }
 
     #[test]
-    fn phase1_short_scramble() {        
+    fn phase1_short_scramble() {
         let scramble = vec![R, U, Rp, Up];
         let mut cube = Cube::solved();
         cube.apply_moves(&scramble);
-        
+
         let solution = Phase1Solver::solve(&cube, &TABLES);
         assert!(solution.len() <= 10, "Short scramble should solve quickly");
-        
+
         // Verify solution
         cube.apply_moves(&solution);
         let state = Phase1State::from_cube(&cube);

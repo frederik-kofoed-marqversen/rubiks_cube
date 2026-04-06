@@ -6,23 +6,17 @@ use crate::math::*;
 pub trait Indexer {
     const SIZE: usize;
 
+    /// Maps a cube state to an index in [0, SIZE).
+    /// INVARIANT: Must map the solved cube to index 0
     fn to_index(cube: &Cube) -> usize;
+    /// Maps an index in [0, SIZE) back to a cube state.
+    /// Inverse of `to_index`.
     fn from_index(index: usize) -> Cube;
 }
 
 const U_EDGES: [Edge; 4] = [Edge::UR, Edge::UB, Edge::UL, Edge::UF];
 const D_EDGES: [Edge; 4] = [Edge::DR, Edge::DB, Edge::DL, Edge::DF];
 const E_SLICE: [Edge; 4] = [Edge::RF, Edge::RB, Edge::LB, Edge::LF];
-const NON_E_SLICE: [Edge; 8] = [
-    Edge::UR,
-    Edge::UB,
-    Edge::UL,
-    Edge::UF,
-    Edge::DR,
-    Edge::DB,
-    Edge::DL,
-    Edge::DF,
-];
 
 pub struct EdgeOrientationIndexer;
 pub struct CornerOrientationIndexer;
@@ -108,15 +102,18 @@ impl Indexer for ESliceIndexer {
             selected[i] = E_SLICE.contains(&edge);
         }
         // Index given by combination rank
-        return combination_rank::<12, 4>(&selected);
+        let index = combination_rank::<12, 4>(&selected);
+        (index + (Self::SIZE - 69)) % Self::SIZE
     }
 
     fn from_index(index: usize) -> Cube {
+        let index = (index + 69) % Self::SIZE;
+        
         let mut cube = Cube::solved();
         let selected: [bool; 12] = combination_unrank::<12, 4>(index);
 
         let mut e_slice_iter = E_SLICE.iter();
-        let mut non_e_slice_iter = NON_E_SLICE.iter();
+        let mut non_e_slice_iter = EDGES.iter().filter(|&&e| !E_SLICE.contains(&e));
 
         for (i, &pos) in EDGES.iter().enumerate() {
             if selected[i] {
@@ -205,17 +202,13 @@ impl Indexer for UEdgePermutationIndexer {
         let permutation: [usize; 4] = permutation_unrank::<4>(permutation_index);
 
         // First permute the U edges relative to each other
-        let mut u_edges_perm = [Edge::UR; 4];
-        for (i, &pos) in U_EDGES.iter().enumerate() {
-            u_edges_perm[i] = U_EDGES[permutation[i]];
-        }
+        let mut u_edge_iter = (0..4).map(|i| U_EDGES[permutation[i]]);
 
         // Then place the U edges in the positions indicated by the combination index
-        let mut u_edge_iter = u_edges_perm.iter();
-        let mut non_u_edge_iter = EDGES.iter().filter(|&&e| !U_EDGES.contains(&e));
+        let mut non_u_edge_iter = EDGES.iter().filter(|&e| !U_EDGES.contains(e));
         for (i, &pos) in EDGES.iter().enumerate() {
             if selected[i] {
-                cube.set_edge_type(pos, *u_edge_iter.next().unwrap());
+                cube.set_edge_type(pos, u_edge_iter.next().unwrap());
             } else {
                 cube.set_edge_type(pos, *non_u_edge_iter.next().unwrap());
             }
@@ -242,10 +235,14 @@ impl Indexer for DEdgePermutationIndexer {
         }
         let combination_index = combination_rank::<12, 4>(&selected);
         let permutation_index = permutation_rank::<4>(&compute_permutation(&D_EDGES, &d_edges));
-        combination_index * 24 + permutation_index
+        
+        let index = combination_index * 24 + permutation_index;
+        (index + (Self::SIZE - 11856)) % Self::SIZE // Shift so that solved state has index 0
     }
 
     fn from_index(index: usize) -> Cube {
+        let index = (index + 11856) % Self::SIZE; // Shift back to original indexing
+        
         let mut cube = Cube::solved();
         let combination_index = index / 24;
         let permutation_index = index % 24;
@@ -254,17 +251,13 @@ impl Indexer for DEdgePermutationIndexer {
         let permutation: [usize; 4] = permutation_unrank::<4>(permutation_index);
 
         // First permute the D edges relative to each other
-        let mut d_edges_perm = [Edge::DR; 4];
-        for (i, &pos) in D_EDGES.iter().enumerate() {
-            d_edges_perm[i] = D_EDGES[permutation[i]];
-        }
+        let mut d_edge_iter = (0..4).map(|i| D_EDGES[permutation[i]]);
 
         // Then place the D edges in the positions indicated by the combination index
-        let mut d_edge_iter = d_edges_perm.iter();
-        let mut non_d_edge_iter = EDGES.iter().filter(|&&e| !D_EDGES.contains(&e));
+        let mut non_d_edge_iter = EDGES.iter().filter(|&e| !D_EDGES.contains(e));
         for (i, &pos) in EDGES.iter().enumerate() {
             if selected[i] {
-                cube.set_edge_type(pos, *d_edge_iter.next().unwrap());
+                cube.set_edge_type(pos, d_edge_iter.next().unwrap());
             } else {
                 cube.set_edge_type(pos, *non_d_edge_iter.next().unwrap());
             }
