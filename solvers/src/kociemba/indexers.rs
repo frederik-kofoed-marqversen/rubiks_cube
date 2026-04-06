@@ -1,20 +1,7 @@
-use super::cube::{Cube, Edge, CORNERS};
-use crate::math::precompute_binomials;
+use std::f32::consts::E;
 
-const BINOM: [[usize; 5]; 13] = precompute_binomials();
-const E_SLICE: [Edge; 4] = [Edge::RF, Edge::RB, Edge::LB, Edge::LF];
-const NON_E_SLICE: [Edge; 8] = [
-    Edge::UR, Edge::UB, Edge::UL, Edge::UF,
-    Edge::DR, Edge::DB, Edge::DL, Edge::DF,
-];
-// We define a local order of edges for indexing the E-slice combination with
-// the 4 E-slice edges appearing first. This guarantees that the solved cube
-// gets ES index = 0.
-const EDGES: [Edge; 12] = [
-    Edge::RF, Edge::RB, Edge::LB, Edge::LF,
-    Edge::UR, Edge::UB, Edge::UL, Edge::UF,
-    Edge::DR, Edge::DB, Edge::DL, Edge::DF,
-];
+use super::cube::{Corner, Cube, Edge, CORNERS, EDGES};
+use crate::math::*;
 
 pub trait Indexer {
     const SIZE: usize;
@@ -23,9 +10,27 @@ pub trait Indexer {
     fn from_index(index: usize) -> Cube;
 }
 
+const U_EDGES: [Edge; 4] = [Edge::UR, Edge::UB, Edge::UL, Edge::UF];
+const D_EDGES: [Edge; 4] = [Edge::DR, Edge::DB, Edge::DL, Edge::DF];
+const E_SLICE: [Edge; 4] = [Edge::RF, Edge::RB, Edge::LB, Edge::LF];
+const NON_E_SLICE: [Edge; 8] = [
+    Edge::UR,
+    Edge::UB,
+    Edge::UL,
+    Edge::UF,
+    Edge::DR,
+    Edge::DB,
+    Edge::DL,
+    Edge::DF,
+];
+
 pub struct EdgeOrientationIndexer;
 pub struct CornerOrientationIndexer;
 pub struct ESliceIndexer;
+pub struct CornerPermutationIndexer;
+pub struct UEdgePermutationIndexer;
+pub struct DEdgePermutationIndexer;
+pub struct ESlicePermutationIndexer;
 
 impl Indexer for EdgeOrientationIndexer {
     const SIZE: usize = 2048; // 2^11 possible orientations
@@ -91,59 +96,177 @@ impl Indexer for CornerOrientationIndexer {
     }
 }
 
-/// E-Slice Position Indexer
-/// 
 /// Tracks which 4 of the 12 edge positions currently contain E-slice edges.
-/// There are C(12,4) = 495 possible combinations.
-///
-/// EDGES array defines the coordinate system: E-slice positions come first (0-3),
-/// ensuring the solved cube (E-slice edges at positions 0-3) maps to index 0.
-///
-/// Uses combination ranking: given positions [p₀, p₁, p₂, p₃] in sorted order,
-/// index = C(p₀,1) + C(p₁,2) + C(p₂,3) + C(p₃,4)
-///
-/// Examples:
-///   Solved cube: positions [0,1,2,3] → C(0,1)+C(1,2)+C(2,3)+C(3,4) = 0+0+0+0 = 0
-///   Positions [0,1,2,4]: C(0,1)+C(1,2)+C(2,3)+C(4,4) = 0+0+0+1 = 1
 impl Indexer for ESliceIndexer {
     const SIZE: usize = 495; // (12 choose 4) possible combinations
 
     fn to_index(cube: &Cube) -> usize {
-        let mut index = 0;
-        let mut k = 0; // Number of E-slice edges found so far
-
+        // Find positions of the 4 E-slice edges
+        let mut selected = [false; 12];
         for (i, &pos) in EDGES.iter().enumerate() {
-            if k == 4 {
-                break;
-            }
-
             let edge = cube.get_edge_type(pos);
-            if E_SLICE.contains(&edge) {
-                k += 1;
-                index += BINOM[i][k]; // C(pos_i, i+1)
-            }
+            selected[i] = E_SLICE.contains(&edge);
         }
-
-        index
+        // Index given by combination rank
+        return combination_rank::<12, 4>(&selected);
     }
 
-    fn from_index(mut index: usize) -> Cube {
+    fn from_index(index: usize) -> Cube {
         let mut cube = Cube::solved();
+        let selected: [bool; 12] = combination_unrank::<12, 4>(index);
 
         let mut e_slice_iter = E_SLICE.iter();
         let mut non_e_slice_iter = NON_E_SLICE.iter();
-        
-        let mut r = 4; // Remaining E-slice edges to place
-        for (i, &pos) in EDGES.iter().enumerate().rev() {
-            let b = BINOM[i][r];
-            if r > 0 && index >= b {
-                // This position contains an E-slice edge
+
+        for (i, &pos) in EDGES.iter().enumerate() {
+            if selected[i] {
                 cube.set_edge_type(pos, *e_slice_iter.next().unwrap());
-                index -= b;
-                r -= 1;
             } else {
-                // Position contains a non E-slice edge
                 cube.set_edge_type(pos, *non_e_slice_iter.next().unwrap());
+            }
+        }
+
+        cube
+    }
+}
+
+impl Indexer for CornerPermutationIndexer {
+    const SIZE: usize = 40320; // 8! possible permutations
+
+    fn to_index(cube: &Cube) -> usize {
+        let mut corners = [Corner::URF; 8];
+        for (i, &pos) in CORNERS.iter().enumerate() {
+            corners[i] = cube.get_corner_type(pos);
+        }
+        let permutation: [usize; 8] = compute_permutation(&CORNERS, &corners);
+        permutation_rank::<8>(&permutation)
+    }
+
+    fn from_index(index: usize) -> Cube {
+        let mut cube = Cube::solved();
+        let permutation: [usize; 8] = permutation_unrank::<8>(index);
+        for (i, &pos) in CORNERS.iter().enumerate() {
+            cube.set_corner_type(pos, CORNERS[permutation[i]]);
+        }
+        cube
+    }
+}
+
+impl Indexer for ESlicePermutationIndexer {
+    const SIZE: usize = 24; // 4! permutations of the 4 E-slice edges
+
+    fn to_index(cube: &Cube) -> usize {
+        let mut edges = [Edge::UR; 4];
+        for (i, &edge) in E_SLICE.iter().enumerate() {
+            edges[i] = cube.get_edge_type(edge);
+        }
+        let permutation: [usize; 4] = compute_permutation(&E_SLICE, &edges);
+        permutation_rank::<4>(&permutation)
+    }
+
+    fn from_index(index: usize) -> Cube {
+        let mut cube = Cube::solved();
+        let permutation: [usize; 4] = permutation_unrank::<4>(index);
+        for (i, &edge) in E_SLICE.iter().enumerate() {
+            cube.set_edge_type(edge, E_SLICE[permutation[i]]);
+        }
+        cube
+    }
+}
+
+/// Tracks the location of the 4 U-face edges among all edge positions
+/// as well as their mutual relative permutation.
+impl Indexer for UEdgePermutationIndexer {
+    const SIZE: usize = 11880; // (12 choose 4) * 4! = 495 * 24
+
+    fn to_index(cube: &Cube) -> usize {
+        let mut selected = [false; 12];
+        let mut u_edges = [Edge::UR; 4];
+        let mut k = 0; // Number of U edges found so far
+        for (i, &pos) in EDGES.iter().enumerate() {
+            let edge = cube.get_edge_type(pos);
+            if U_EDGES.contains(&edge) {
+                selected[i] = true;
+                u_edges[k] = edge;
+                k += 1;
+            }
+        }
+        let combination_index = combination_rank::<12, 4>(&selected);
+        let permutation_index = permutation_rank::<4>(&compute_permutation(&U_EDGES, &u_edges));
+        combination_index * 24 + permutation_index
+    }
+
+    fn from_index(index: usize) -> Cube {
+        let mut cube = Cube::solved();
+        let combination_index = index / 24;
+        let permutation_index = index % 24;
+
+        let selected: [bool; 12] = combination_unrank::<12, 4>(combination_index);
+        let permutation: [usize; 4] = permutation_unrank::<4>(permutation_index);
+
+        // First permute the U edges relative to each other
+        let mut u_edges_perm = [Edge::UR; 4];
+        for (i, &pos) in U_EDGES.iter().enumerate() {
+            u_edges_perm[i] = U_EDGES[permutation[i]];
+        }
+
+        // Then place the U edges in the positions indicated by the combination index
+        let mut u_edge_iter = u_edges_perm.iter();
+        let mut non_u_edge_iter = EDGES.iter().filter(|&&e| !U_EDGES.contains(&e));
+        for (i, &pos) in EDGES.iter().enumerate() {
+            if selected[i] {
+                cube.set_edge_type(pos, *u_edge_iter.next().unwrap());
+            } else {
+                cube.set_edge_type(pos, *non_u_edge_iter.next().unwrap());
+            }
+        }
+
+        cube
+    }
+}
+
+impl Indexer for DEdgePermutationIndexer {
+    const SIZE: usize = 11880; // (12 choose 4) * 4! = 495 * 24
+
+    fn to_index(cube: &Cube) -> usize {
+        let mut selected = [false; 12];
+        let mut d_edges = [Edge::DR; 4];
+        let mut k = 0; // Number of D edges found so far
+        for (i, &pos) in EDGES.iter().enumerate() {
+            let edge = cube.get_edge_type(pos);
+            if D_EDGES.contains(&edge) {
+                selected[i] = true;
+                d_edges[k] = edge;
+                k += 1;
+            }
+        }
+        let combination_index = combination_rank::<12, 4>(&selected);
+        let permutation_index = permutation_rank::<4>(&compute_permutation(&D_EDGES, &d_edges));
+        combination_index * 24 + permutation_index
+    }
+
+    fn from_index(index: usize) -> Cube {
+        let mut cube = Cube::solved();
+        let combination_index = index / 24;
+        let permutation_index = index % 24;
+
+        let selected: [bool; 12] = combination_unrank::<12, 4>(combination_index);
+        let permutation: [usize; 4] = permutation_unrank::<4>(permutation_index);
+
+        // First permute the D edges relative to each other
+        let mut d_edges_perm = [Edge::DR; 4];
+        for (i, &pos) in D_EDGES.iter().enumerate() {
+            d_edges_perm[i] = D_EDGES[permutation[i]];
+        }
+
+        // Then place the D edges in the positions indicated by the combination index
+        let mut d_edge_iter = d_edges_perm.iter();
+        let mut non_d_edge_iter = EDGES.iter().filter(|&&e| !D_EDGES.contains(&e));
+        for (i, &pos) in EDGES.iter().enumerate() {
+            if selected[i] {
+                cube.set_edge_type(pos, *d_edge_iter.next().unwrap());
+            } else {
+                cube.set_edge_type(pos, *non_d_edge_iter.next().unwrap());
             }
         }
 
@@ -157,6 +280,10 @@ mod tests {
     type EO = EdgeOrientationIndexer;
     type CO = CornerOrientationIndexer;
     type ES = ESliceIndexer;
+    type CP = CornerPermutationIndexer;
+    type ESP = ESlicePermutationIndexer;
+    type UEP = UEdgePermutationIndexer;
+    type DEP = DEdgePermutationIndexer;
 
     #[test]
     fn eo_zero_index() {
@@ -171,6 +298,26 @@ mod tests {
     #[test]
     fn es_zero_index() {
         assert_eq!(ES::to_index(&Cube::solved()), 0);
+    }
+
+    #[test]
+    fn cp_zero_index() {
+        assert_eq!(CP::to_index(&Cube::solved()), 0);
+    }
+
+    #[test]
+    fn esp_zero_index() {
+        assert_eq!(ESP::to_index(&Cube::solved()), 0);
+    }
+
+    #[test]
+    fn uep_zero_index() {
+        assert_eq!(UEP::to_index(&Cube::solved()), 0);
+    }
+
+    #[test]
+    fn dep_zero_index() {
+        assert_eq!(DEP::to_index(&Cube::solved()), 0);
     }
 
     #[test]
@@ -193,6 +340,38 @@ mod tests {
     fn es_indexing_consistency() {
         for i in 0..ES::SIZE {
             let test = ES::to_index(&ES::from_index(i));
+            assert_eq!(i, test, "Failed for index {i}");
+        }
+    }
+
+    #[test]
+    fn cp_indexing_consistency() {
+        for i in 0..CP::SIZE {
+            let test = CP::to_index(&CP::from_index(i));
+            assert_eq!(i, test, "Failed for index {i}");
+        }
+    }
+
+    #[test]
+    fn esp_indexing_consistency() {
+        for i in 0..ESP::SIZE {
+            let test = ESP::to_index(&ESP::from_index(i));
+            assert_eq!(i, test, "Failed for index {i}");
+        }
+    }
+
+    #[test]
+    fn uep_indexing_consistency() {
+        for i in 0..UEP::SIZE {
+            let test = UEP::to_index(&UEP::from_index(i));
+            assert_eq!(i, test, "Failed for index {i}");
+        }
+    }
+
+    #[test]
+    fn dep_indexing_consistency() {
+        for i in 0..DEP::SIZE {
+            let test = DEP::to_index(&DEP::from_index(i));
             assert_eq!(i, test, "Failed for index {i}");
         }
     }

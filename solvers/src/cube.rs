@@ -1,13 +1,16 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Edge {
+    RF, RB, LB, LF, // middle layer (E-slice)
     UR, UB, UL, UF, // top layer
-    RF, RB, LB, LF, // middle layer
     DR, DB, DL, DF, // bottom layer
 }
 
+// We define a the ordering of edges with the 4 E-slice edges appearing first. 
+// This guarantees that the solved cube gets ES index = 0. (This is specific 
+// for the ESliceIndexer implementation)
 pub const EDGES: [Edge; 12] = [
-    Edge::UR, Edge::UB, Edge::UL, Edge::UF,
     Edge::RF, Edge::RB, Edge::LB, Edge::LF,
+    Edge::UR, Edge::UB, Edge::UL, Edge::UF,
     Edge::DR, Edge::DB, Edge::DL, Edge::DF,
 ];
 

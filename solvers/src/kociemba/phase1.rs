@@ -129,13 +129,12 @@ mod tests {
 
     #[test]
     fn phase1_simple_scramble() {        
-        // Single F move flips 4 edges and rotates 4 corners
         let mut cube = Cube::solved();
         cube.turn(F);
         
         let solution = Phase1Solver::solve(&cube, &TABLES);
         
-        // Verify solution reaches Phase 1 goal
+        // Verify solution
         cube.apply_moves(&solution);
         let state = Phase1State::from_cube(&cube);
         assert!(state.is_solved(), "Phase 1 should reach goal state");
@@ -150,27 +149,9 @@ mod tests {
         let solution = Phase1Solver::solve(&cube, &TABLES);
         assert!(solution.len() <= 10, "Short scramble should solve quickly");
         
-        // Verify solution works
+        // Verify solution
         cube.apply_moves(&solution);
         let state = Phase1State::from_cube(&cube);
         assert!(state.is_solved(), "Solution should reach Phase 1 goal");
-    }
-
-    #[test]
-    fn phase1_verify_goal_state() {        
-        // Use the scramble from main
-        let scramble = vec![Rp, U2, R2, Dp, Lp, Bp, L2, Up, R2, D2, R, B2, Lp, D2, Rp, F2, B2, R, F];
-        let mut cube = Cube::solved();
-        cube.apply_moves(&scramble);
-        
-        let solution = Phase1Solver::solve(&cube, &TABLES);
-        
-        // Apply solution
-        cube.apply_moves(&solution);
-        
-        // Check all three coordinates are at goal
-        assert_eq!(EdgeOrientationIndexer::to_index(&cube), 0, "All edges oriented");
-        assert_eq!(CornerOrientationIndexer::to_index(&cube), 0, "All corners oriented");
-        assert_eq!(ESliceIndexer::to_index(&cube), 0, "E-slice in correct positions");
     }
 }

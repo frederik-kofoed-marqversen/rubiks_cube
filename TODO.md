@@ -1,6 +1,4 @@
-Implement Phase 1 IDA*
-Verify Phase 1 works (random cubes)
-Implement Phase 2 indexers
+Fix Phase 2 indexers to be solved at index zero
 Build Phase 2 move tables
 Build Phase 2 pruning
 Implement Phase 2 search
