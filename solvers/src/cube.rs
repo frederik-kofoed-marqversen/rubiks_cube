@@ -126,6 +126,58 @@ pub struct Cube {
     corner_pos: [Corner; 8],
 }
 
+// def inv_cubie_cube(self, d):
+//         """Store the inverse of this cubie cube in d."""
+//         for e in Ed:
+//             d.ep[self.ep[e]] = e
+//         for e in Ed:
+//             d.eo[e] = self.eo[d.ep[e]]
+
+//         for c in Co:
+//             d.cp[self.cp[c]] = c
+//         for c in Co:
+//             ori = self.co[d.cp[c]]
+//             if ori >= 3:
+//                 d.co[c] = ori
+//             else:
+//                 d.co[c] = -ori
+//                 if d.co[c] < 0:
+//                     d.co[c] += 3
+
+//     def corner_parity(self):
+//         """Give the parity of the corner permutation."""
+//         s = 0
+//         for i in range(Co.DRB, Co.URF, -1):
+//             for j in range(i - 1, Co.URF - 1, -1):
+//                 if self.cp[j] > self.cp[i]:
+//                     s += 1
+//         return s % 2
+
+//     def edge_parity(self):
+//         """Give the parity of the edge permutation. A solvable cube has the same corner and edge parity."""
+//         s = 0
+//         for i in range(Ed.BR, Ed.UR, -1):
+//             for j in range(i - 1, Ed.UR - 1, -1):
+//                 if self.ep[j] > self.ep[i]:
+//                     s += 1
+//         return s % 2
+
+//     def symmetries(self):
+//         """Generate a list of the symmetries and antisymmetries of the cubie cube."""
+//         from twophase.symmetries import symCube, inv_idx  # not nice here but else we have circular imports
+//         s = []
+//         d = CubieCube()
+//         for j in range(N_SYM):
+//             c = CubieCube(symCube[j].cp, symCube[j].co, symCube[j].ep, symCube[j].eo)
+//             c.multiply(self)
+//             c.multiply(symCube[inv_idx[j]])
+//             if self == c:
+//                 s.append(j)
+//             c.inv_cubie_cube(d)
+//             if self == d:  # then we have antisymmetry
+//                 s.append(j + N_SYM)
+//         return s
+
 impl Cube {
     pub fn solved() -> Self {
         Cube{

@@ -1,6 +1,6 @@
-use super::table::LookupTable2D;
-use super::indexers::{CornerOrientationIndexer, ESliceIndexer, EdgeOrientationIndexer, Indexer};
 use super::cube::{Move, MOVES};
+use super::indexers::*;
+use super::table::LookupTable2D;
 
 pub type MoveTable = LookupTable2D<u16, 18>;
 
@@ -69,19 +69,17 @@ impl<const IDX2_WIDTH: usize> PruningTable<IDX2_WIDTH> {
 }
 
 pub struct KociembaTables {
-    // Phase 1
+    // Move tables
     pub eo_move: MoveTable,
     pub co_move: MoveTable,
+    pub cp_move: MoveTable,
     pub es_move: MoveTable,
+    pub ue_move: MoveTable,
+    pub de_move: MoveTable,
 
+    // Pruning tables
     pub eo_es_prune: PruningTable<{ ESliceIndexer::SIZE }>,
     pub co_es_prune: PruningTable<{ ESliceIndexer::SIZE }>,
-    // // Phase 2
-    // pub cp_move: MoveTable,
-    // pub ep_move: MoveTable,
-    // pub ud_move: MoveTable,
-
-    // pub cp_ep_prune: PruningTable<...>,
 }
 
 impl KociembaTables {
@@ -99,12 +97,24 @@ impl KociembaTables {
 
     pub fn build() -> Self {
         println!("Building Kociemba tables...");
+        
+        // Move tables
+        println!("Building move tables...");
         println!("Edge Orientation Move Table...");
         let eo_move = MoveTable::build::<EdgeOrientationIndexer>();
         println!("Corner Orientation Move Table...");
         let co_move = MoveTable::build::<CornerOrientationIndexer>();
+        println!("Corner Permutation Move Table...");
+        let cp_move = MoveTable::build::<CornerPermutationIndexer>();
         println!("E-Slice Move Table...");
         let es_move = MoveTable::build::<ESliceIndexer>();
+        println!("U-Edge Move Table...");
+        let ue_move = MoveTable::build::<UEdgeIndexer>();
+        println!("D-Edge Move Table...");
+        let de_move = MoveTable::build::<DEdgeIndexer>();
+        
+        // Pruning tables
+        println!("Building pruning tables...");
         println!("EO-ES Pruning Table...");
         let eo_es_prune = PruningTable::build(&eo_move, &es_move);
         println!("CO-ES Pruning Table...");
@@ -113,7 +123,10 @@ impl KociembaTables {
         Self {
             eo_move,
             co_move,
+            cp_move,
             es_move,
+            ue_move,
+            de_move,
             eo_es_prune,
             co_es_prune,
         }
@@ -122,17 +135,25 @@ impl KociembaTables {
     pub fn load(file_path: &str) -> Result<Self, std::io::Error> {
         let file = std::fs::File::open(file_path)?;
         let mut reader = std::io::BufReader::new(file);
-        
+
+        // Move tables
         let eo_move = MoveTable::deserialize_from_reader(&mut reader)?;
         let co_move = MoveTable::deserialize_from_reader(&mut reader)?;
+        let cp_move = MoveTable::deserialize_from_reader(&mut reader)?;
         let es_move = MoveTable::deserialize_from_reader(&mut reader)?;
+        let ue_move = MoveTable::deserialize_from_reader(&mut reader)?;
+        let de_move = MoveTable::deserialize_from_reader(&mut reader)?;
+        // Pruning tables
         let eo_es_prune = PruningTable::deserialize_from_reader(&mut reader)?;
         let co_es_prune = PruningTable::deserialize_from_reader(&mut reader)?;
 
         Ok(Self {
             eo_move,
             co_move,
+            cp_move,
             es_move,
+            ue_move,
+            de_move,
             eo_es_prune,
             co_es_prune,
         })
@@ -142,16 +163,21 @@ impl KociembaTables {
         if let Some(parent) = std::path::Path::new(file_path).parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
         let file = std::fs::File::create(file_path)?;
         let mut writer = std::io::BufWriter::new(file);
-        
+
+        // Move tables
         self.eo_move.serialize_to_writer(&mut writer)?;
         self.co_move.serialize_to_writer(&mut writer)?;
+        self.cp_move.serialize_to_writer(&mut writer)?;
         self.es_move.serialize_to_writer(&mut writer)?;
+        self.ue_move.serialize_to_writer(&mut writer)?;
+        self.de_move.serialize_to_writer(&mut writer)?;
+        // Pruning tables
         self.eo_es_prune.serialize_to_writer(&mut writer)?;
         self.co_es_prune.serialize_to_writer(&mut writer)?;
-        
+
         Ok(())
     }
 }

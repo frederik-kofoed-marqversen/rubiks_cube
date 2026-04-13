@@ -1,17 +1,14 @@
-Fix Phase 2 indexers to be solved at index zero
-Build Phase 2 move tables
-Build Phase 2 pruning
-Implement Phase 2 search
-Finally:
-Combine into full solver
-Optimize
-(Optional) symmetry reduction
+## Functionality
+Phase 2 indexers move tables and pruning tables
+Parallelize table building
+Mod 3 reduction of pruning tables
+Symmetry reduction
+Continuous solution improvement (keep searching for better solutions after first is found)
 
+## Cleanup
+Unify the three 4-edge indexers to reduce code duplication
 
-
-
-
-## Later
+## Other comments
 
 use once_cell::sync::Lazy;
 

@@ -5,8 +5,8 @@ mod solver;
 mod indexers;
 mod table;
 mod kociemba_tables;
-mod phase1;
-mod phase2;
+mod phase_solvers;
+mod coord_cube;
 
 pub use kociemba_tables::KociembaTables;
 pub use solver::KociembaSolver;

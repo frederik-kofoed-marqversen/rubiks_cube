@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
+use crate::kociemba::coord_cube::CoordinateCube;
+
 use super::cube::{Cube, Move};
 use super::kociemba_tables::KociembaTables;
-use super::phase1::Phase1Solver;
-use super::phase2::Phase2Solver;
+use super::phase_solvers::{Phase1Solver, Phase2Solver};
 use super::Solver;
 
 pub struct KociembaSolver {
@@ -19,10 +20,10 @@ impl KociembaSolver {
 }
 
 impl Solver for KociembaSolver {
-    fn solve(&self, mut cube: Cube) -> Vec<Move> {
-        let moves1 = Phase1Solver::solve(&cube, &self.tables);
-        cube.apply_moves(&moves1);
-        let moves2 = Phase2Solver::solve(&cube, &self.tables);
+    fn solve(&self, cube: Cube) -> Vec<Move> {
+        let cube = CoordinateCube::from_cube(&cube);
+        let (moves1, cube) = Phase1Solver::solve(cube, &self.tables);
+        let moves2 = Phase2Solver::solve(cube, &self.tables);
 
         [moves1, moves2].concat()
     }
