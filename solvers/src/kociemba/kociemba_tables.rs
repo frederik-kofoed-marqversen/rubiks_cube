@@ -1,6 +1,6 @@
 use super::cube::{Move, MOVES};
 use super::indexers::*;
-use super::table::LookupTable2D;
+use super::lookup_table::LookupTable2D;
 
 pub type MoveTable = LookupTable2D<u16, 18>;
 
@@ -34,6 +34,12 @@ impl<const IDX2_WIDTH: usize> PruningTable<IDX2_WIDTH> {
     #[inline]
     pub fn get(&self, idx1: usize, idx2: usize) -> u8 {
         self.data[idx1 * IDX2_WIDTH + idx2]
+        
+        // Tightly packed mod 3 distances.
+        // let linear_index = idx1 * IDX2_WIDTH + idx2;
+        // let word_index = linear_index >> 4;          // divide by 16 (number of entries per u32)
+        // let bit_offset = (linear_index & 0xF) << 1;  // (mod 16) * 2
+        // (self.data[word_index] >> bit_offset) & 0b11
     }
 
     #[inline]
@@ -80,6 +86,9 @@ pub struct KociembaTables {
     // Pruning tables
     pub eo_es_prune: PruningTable<{ ESliceIndexer::SIZE }>,
     pub co_es_prune: PruningTable<{ ESliceIndexer::SIZE }>,
+    pub cp_es_prune: PruningTable<{ ESliceIndexer::SIZE }>,
+    pub cp_ue_prune: PruningTable<{ UEdgeIndexer::SIZE }>,
+    pub cp_de_prune: PruningTable<{ DEdgeIndexer::SIZE }>,
 }
 
 impl KociembaTables {
@@ -119,6 +128,12 @@ impl KociembaTables {
         let eo_es_prune = PruningTable::build(&eo_move, &es_move);
         println!("CO-ES Pruning Table...");
         let co_es_prune = PruningTable::build(&co_move, &es_move);
+        println!("CP-ES Pruning Table...");
+        let cp_es_prune = PruningTable::build(&cp_move, &es_move);
+        println!("CP-UE Pruning Table...");
+        let cp_ue_prune = PruningTable::build(&cp_move, &ue_move);
+        println!("CP-DE Pruning Table...");
+        let cp_de_prune = PruningTable::build(&cp_move, &de_move);
 
         Self {
             eo_move,
@@ -129,6 +144,9 @@ impl KociembaTables {
             de_move,
             eo_es_prune,
             co_es_prune,
+            cp_es_prune,
+            cp_ue_prune,
+            cp_de_prune,
         }
     }
 
@@ -146,6 +164,9 @@ impl KociembaTables {
         // Pruning tables
         let eo_es_prune = PruningTable::deserialize_from_reader(&mut reader)?;
         let co_es_prune = PruningTable::deserialize_from_reader(&mut reader)?;
+        let cp_es_prune = PruningTable::deserialize_from_reader(&mut reader)?;
+        let cp_ue_prune = PruningTable::deserialize_from_reader(&mut reader)?;
+        let cp_de_prune = PruningTable::deserialize_from_reader(&mut reader)?;
 
         Ok(Self {
             eo_move,
@@ -156,6 +177,9 @@ impl KociembaTables {
             de_move,
             eo_es_prune,
             co_es_prune,
+            cp_es_prune,
+            cp_ue_prune,
+            cp_de_prune,
         })
     }
 
@@ -177,6 +201,9 @@ impl KociembaTables {
         // Pruning tables
         self.eo_es_prune.serialize_to_writer(&mut writer)?;
         self.co_es_prune.serialize_to_writer(&mut writer)?;
+        self.cp_es_prune.serialize_to_writer(&mut writer)?;
+        self.cp_ue_prune.serialize_to_writer(&mut writer)?;
+        self.cp_de_prune.serialize_to_writer(&mut writer)?;
 
         Ok(())
     }

@@ -1,5 +1,3 @@
-use std::f32::consts::E;
-
 use super::cube::{Corner, Cube, Edge, CORNERS, EDGES};
 use crate::math::*;
 
@@ -24,7 +22,6 @@ pub struct CornerPermutationIndexer;
 pub struct ESliceIndexer;
 pub struct UEdgeIndexer;
 pub struct DEdgeIndexer;
-pub struct UDEdgePermutationIndexer;
 
 impl Indexer for EdgeOrientationIndexer {
     const SIZE: usize = 2048; // 2^11 possible orientations
@@ -259,16 +256,16 @@ impl Indexer for DEdgeIndexer {
     }
 }
 
-impl Indexer for UDEdgePermutationIndexer {
-    const SIZE: usize = 40320; // 8! possible permutations of the 8 U and D edges
+// impl Indexer for UDEdgePermutationIndexer {
+//     const SIZE: usize = 40320; // 8! possible permutations of the 8 U and D edges
     
-    fn to_index(cube: &Cube) -> usize {
-        unimplemented!()
-    }
+//     fn to_index(cube: &Cube) -> usize {
+//         unimplemented!()
+//     }
 
-    fn from_index(index: usize) -> Cube {
-        unimplemented!()
-    }
+//     fn from_index(index: usize) -> Cube {
+//         unimplemented!()
+//     }
 
     // def get_ud_edges(self):
     //     """Get the permutation of the 8 U and D edges.
@@ -293,7 +290,7 @@ impl Indexer for UDEdgePermutationIndexer {
     //         while k > 0:
     //             rotate_right(self.ep, 0, j)
     //             k -= 1
-}
+// }
 
 #[cfg(test)]
 mod tests {
