@@ -1,6 +1,7 @@
 use super::cube::{Move, MOVES};
 use super::indexers::*;
 use super::lookup_table::LookupTable2D;
+use serde::{Deserialize, Serialize};
 
 pub type MoveTable = LookupTable2D<u16, 18>;
 
@@ -74,6 +75,7 @@ impl<const IDX2_WIDTH: usize> PruningTable<IDX2_WIDTH> {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct KociembaTables {
     // Move tables
     pub eo_move: MoveTable,
@@ -94,7 +96,7 @@ pub struct KociembaTables {
 impl KociembaTables {
     pub const DEFAULT_PATH: &'static str = "target/kociemba_tables.bin";
 
-    pub fn load_or_build(path: &str) -> Result<Self, std::io::Error> {
+    pub fn load_or_build(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         if std::path::Path::new(path).exists() {
             Self::load(path)
         } else {
@@ -102,6 +104,23 @@ impl KociembaTables {
             tables.save(path)?;
             Ok(tables)
         }
+    }
+
+    pub fn load(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let file = std::fs::File::open(path)?;
+        let reader = std::io::BufReader::new(file);
+        let tables = bincode::deserialize_from(reader)?;
+        Ok(tables)
+    }
+
+    pub fn save(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let file = std::fs::File::create(path)?;
+        let writer = std::io::BufWriter::new(file);
+        bincode::serialize_into(writer, self)?;
+        Ok(())
     }
 
     pub fn build() -> Self {
@@ -148,63 +167,5 @@ impl KociembaTables {
             cp_ue_prune,
             cp_de_prune,
         }
-    }
-
-    pub fn load(file_path: &str) -> Result<Self, std::io::Error> {
-        let file = std::fs::File::open(file_path)?;
-        let mut reader = std::io::BufReader::new(file);
-
-        // Move tables
-        let eo_move = MoveTable::deserialize_from_reader(&mut reader)?;
-        let co_move = MoveTable::deserialize_from_reader(&mut reader)?;
-        let cp_move = MoveTable::deserialize_from_reader(&mut reader)?;
-        let es_move = MoveTable::deserialize_from_reader(&mut reader)?;
-        let ue_move = MoveTable::deserialize_from_reader(&mut reader)?;
-        let de_move = MoveTable::deserialize_from_reader(&mut reader)?;
-        // Pruning tables
-        let eo_es_prune = PruningTable::deserialize_from_reader(&mut reader)?;
-        let co_es_prune = PruningTable::deserialize_from_reader(&mut reader)?;
-        let cp_es_prune = PruningTable::deserialize_from_reader(&mut reader)?;
-        let cp_ue_prune = PruningTable::deserialize_from_reader(&mut reader)?;
-        let cp_de_prune = PruningTable::deserialize_from_reader(&mut reader)?;
-
-        Ok(Self {
-            eo_move,
-            co_move,
-            cp_move,
-            es_move,
-            ue_move,
-            de_move,
-            eo_es_prune,
-            co_es_prune,
-            cp_es_prune,
-            cp_ue_prune,
-            cp_de_prune,
-        })
-    }
-
-    pub fn save(&self, file_path: &str) -> Result<(), std::io::Error> {
-        if let Some(parent) = std::path::Path::new(file_path).parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-
-        let file = std::fs::File::create(file_path)?;
-        let mut writer = std::io::BufWriter::new(file);
-
-        // Move tables
-        self.eo_move.serialize_to_writer(&mut writer)?;
-        self.co_move.serialize_to_writer(&mut writer)?;
-        self.cp_move.serialize_to_writer(&mut writer)?;
-        self.es_move.serialize_to_writer(&mut writer)?;
-        self.ue_move.serialize_to_writer(&mut writer)?;
-        self.de_move.serialize_to_writer(&mut writer)?;
-        // Pruning tables
-        self.eo_es_prune.serialize_to_writer(&mut writer)?;
-        self.co_es_prune.serialize_to_writer(&mut writer)?;
-        self.cp_es_prune.serialize_to_writer(&mut writer)?;
-        self.cp_ue_prune.serialize_to_writer(&mut writer)?;
-        self.cp_de_prune.serialize_to_writer(&mut writer)?;
-
-        Ok(())
     }
 }

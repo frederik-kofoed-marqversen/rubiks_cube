@@ -32,9 +32,8 @@ fn main() {
 
     // Kociemba's algorithm
     println!("\n--- Testing Kociemba's Algorithm ---");
-    // let tables = KociembaTables::load_or_build(KociembaTables::DEFAULT_PATH)
-    //     .expect("Failed to initialize Kociemba tables");
-    let tables = KociembaTables::build();
+    let tables = KociembaTables::load_or_build(KociembaTables::DEFAULT_PATH)
+        .expect("Failed to initialize Kociemba tables");
     let solver = KociembaSolver::new(tables);
     
     let mut scrambled_cube = Cube::solved();
