@@ -39,9 +39,9 @@ impl PhaseState for Phase1State {
     }
 
     fn heuristic(&self, tables: &KociembaTables, prev_distance: u32) -> u32 {
-        let h1 = tables.eo_es_prune.get(self.eo, prev_distance);
-        let h2 = tables.co_es_prune.get(self.co, prev_distance);
-        let h3 = tables.cp_es_prune.get(self.co, prev_distance);
+        let h1 = tables.eo_prune.get(self.eo, prev_distance);
+        let h2 = tables.co_prune.get(self.co, prev_distance);
+        let h3 = tables.es_prune.get(self.es, prev_distance);
         h1.max(h2).max(h3)
     }
 }
@@ -88,10 +88,10 @@ impl PhaseState for Phase2State {
     }
 
     fn heuristic(&self, tables: &KociembaTables, prev_distance: u32) -> u32 {
-        let h1 = tables.cp_es_prune.get(self.cp, prev_distance);
-        let h2 = tables.cp_ue_prune.get(self.ue, prev_distance);
-        let h3 = tables.cp_de_prune.get(self.es, prev_distance);
-        let h4 = tables.cp_ue_prune.get(self.de, prev_distance);
+        let h1 = tables.cp_prune.get(self.cp, prev_distance);
+        let h2 = tables.es_prune.get(self.es, prev_distance);
+        let h3 = tables.ue_prune.get(self.ue, prev_distance);
+        let h4 = tables.de_prune.get(self.de, prev_distance);
         h1.max(h2).max(h3).max(h4)
     }
 }
@@ -116,7 +116,7 @@ fn is_valid_move(prev_opt: Option<&Move>, next: Move) -> bool {
 }
 
 pub fn solve_phase<S: PhaseState>(start: S, tables: &KociembaTables, max_depth: u32) -> Vec<Move> {
-    let mut bound = start.heuristic(tables, ???);
+    let mut bound = start.heuristic(tables, 0);
 
     if bound == 0 {
         return Vec::new();
@@ -143,7 +143,7 @@ fn dfs<S: PhaseState>(
     path: &mut Vec<Move>,
     tables: &KociembaTables,
 ) -> bool {
-    if depth + state.heuristic(tables, ???) > bound {
+    if depth + state.heuristic(tables, 0) > bound {
         return false;
     }
     if state.is_solved() {

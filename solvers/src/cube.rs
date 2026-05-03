@@ -246,36 +246,6 @@ impl Cube {
         self.corner_pos[corner as usize]
     }
 
-    pub fn turn(&mut self, turn: Move) -> &mut Self {
-        match turn {
-            Move::U  => self.u(),
-            Move::U2 => self.u().u(),
-            Move::Up => self.u().u().u(),
-            Move::D  => self.d(),
-            Move::D2 => self.d().d(),
-            Move::Dp => self.d().d().d(),
-            Move::R  => self.r(),
-            Move::R2 => self.r().r(),
-            Move::Rp => self.r().r().r(),
-            Move::L  => self.l(),
-            Move::L2 => self.l().l(),
-            Move::Lp => self.l().l().l(),
-            Move::F  => self.f(),
-            Move::F2 => self.f().f(),
-            Move::Fp => self.f().f().f(),
-            Move::B  => self.b(),
-            Move::B2 => self.b().b(),
-            Move::Bp => self.b().b().b(),
-        }
-    }
-
-    pub fn apply_moves(&mut self, moves: &[Move]) -> &mut Self {
-        for &turn in moves {
-            self.turn(turn);
-        }
-        self
-    }
-
     #[inline]
     pub fn swap_edges(&mut self, pos1: Edge, pos2: Edge) {
         self.edges.swap(pos1 as usize, pos2 as usize);
@@ -411,6 +381,42 @@ impl Cube {
         self.edges[Edge::RB as usize].flip();
         
         self
+    }
+}
+
+pub trait Moveable {
+    fn turn(&mut self, mv: Move) -> &mut Self;
+
+    fn apply_moves(&mut self, moves: &[Move]) -> &mut Self {
+        for &turn in moves {
+            self.turn(turn);
+        }
+        self
+    }
+}
+
+impl Moveable for Cube {
+    fn turn(&mut self, turn: Move) -> &mut Self {
+        match turn {
+            Move::U  => self.u(),
+            Move::U2 => self.u().u(),
+            Move::Up => self.u().u().u(),
+            Move::D  => self.d(),
+            Move::D2 => self.d().d(),
+            Move::Dp => self.d().d().d(),
+            Move::R  => self.r(),
+            Move::R2 => self.r().r(),
+            Move::Rp => self.r().r().r(),
+            Move::L  => self.l(),
+            Move::L2 => self.l().l(),
+            Move::Lp => self.l().l().l(),
+            Move::F  => self.f(),
+            Move::F2 => self.f().f(),
+            Move::Fp => self.f().f().f(),
+            Move::B  => self.b(),
+            Move::B2 => self.b().b(),
+            Move::Bp => self.b().b().b(),
+        }
     }
 }
 

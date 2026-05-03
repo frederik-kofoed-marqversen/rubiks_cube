@@ -23,13 +23,3 @@ Then:
 let solver = KociembaSolver {
     tables: TABLES.clone(),
 };
-
-Could use crate serde for serialisation/deserialisation
-
-use serde::{Serialize, Deserialize};
-
-#[derive(Serialize, Deserialize)]
-pub struct KociembaTables {
-    pub eo_move: MoveTable,
-    // ... rest
-}

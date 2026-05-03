@@ -2,7 +2,7 @@ extern crate solvers;
 use solvers::Solver;
 // use solvers::thistlethwaite::{LookupTableSolver, ThistlethwaiteTables, BFSSolver, BDBFSSolver};
 use solvers::kociemba::{KociembaSolver, KociembaTables};
-use solvers::cube::Cube;
+use solvers::cube::{Cube, Moveable};
 use solvers::cube::Move::*;
 
 fn main() {

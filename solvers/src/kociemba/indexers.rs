@@ -1,20 +1,22 @@
 use super::cube::{Corner, Cube, Edge, CORNERS, EDGES};
 use crate::math::*;
 
-pub trait CubeIndexer {
+pub trait Indexer<T> {
     const SIZE: usize;
+    const SOLVED_INDEX: usize = 0;
 
     /// Maps a cube state to an index in [0, SIZE).
-    /// INVARIANT: Must map the solved cube to index 0
-    fn to_index(cube: &Cube) -> usize;
+    /// INVARIANT: Should map a solved state to `SOLVED_INDEX`.
+    fn to_index(cube: &T) -> usize;
+
     /// Maps an index in [0, SIZE) back to a cube state.
     /// Inverse of `to_index`.
-    fn from_index(index: usize) -> Cube;
+    fn from_index(index: usize) -> T;
 }
 
 const U_EDGES: [Edge; 4] = [Edge::UR, Edge::UB, Edge::UL, Edge::UF];
-const D_EDGES: [Edge; 4] = [Edge::DR, Edge::DB, Edge::DL, Edge::DF];
 const E_SLICE: [Edge; 4] = [Edge::RF, Edge::RB, Edge::LB, Edge::LF];
+const D_EDGES: [Edge; 4] = [Edge::DR, Edge::DB, Edge::DL, Edge::DF];
 
 pub struct EdgeOrientationIndexer;
 pub struct CornerOrientationIndexer;
@@ -23,7 +25,7 @@ pub struct ESliceIndexer;
 pub struct UEdgeIndexer;
 pub struct DEdgeIndexer;
 
-impl CubeIndexer for EdgeOrientationIndexer {
+impl Indexer<Cube> for EdgeOrientationIndexer {
     const SIZE: usize = 2048; // 2^11 possible orientations
 
     fn to_index(cube: &Cube) -> usize {
@@ -55,7 +57,7 @@ impl CubeIndexer for EdgeOrientationIndexer {
     }
 }
 
-impl CubeIndexer for CornerOrientationIndexer {
+impl Indexer<Cube> for CornerOrientationIndexer {
     const SIZE: usize = 2187; // 3^7 possible orientations
 
     fn to_index(cube: &Cube) -> usize {
@@ -87,7 +89,7 @@ impl CubeIndexer for CornerOrientationIndexer {
     }
 }
 
-impl CubeIndexer for CornerPermutationIndexer {
+impl Indexer<Cube> for CornerPermutationIndexer {
     const SIZE: usize = 40320; // 8! possible permutations
 
     fn to_index(cube: &Cube) -> usize {
@@ -111,7 +113,7 @@ impl CubeIndexer for CornerPermutationIndexer {
 
 /// Tracks the location of the 4 E-slice edges among all edge positions
 /// as well as their mutual relative permutation.
-impl CubeIndexer for ESliceIndexer {
+impl Indexer<Cube> for ESliceIndexer {
     const SIZE: usize = 11880; // (12 choose 4) * 4! = 495 * 24
 
     fn to_index(cube: &Cube) -> usize {
@@ -162,7 +164,7 @@ impl CubeIndexer for ESliceIndexer {
 
 /// Tracks the location of the 4 U-face edges among all edge positions
 /// as well as their mutual relative permutation.
-impl CubeIndexer for UEdgeIndexer {
+impl Indexer<Cube> for UEdgeIndexer {
     const SIZE: usize = 11880; // (12 choose 4) * 4! = 495 * 24
 
     fn to_index(cube: &Cube) -> usize {
@@ -207,7 +209,7 @@ impl CubeIndexer for UEdgeIndexer {
     }
 }
 
-impl CubeIndexer for DEdgeIndexer {
+impl Indexer<Cube> for DEdgeIndexer {
     const SIZE: usize = 11880; // (12 choose 4) * 4! = 495 * 24
 
     fn to_index(cube: &Cube) -> usize {
