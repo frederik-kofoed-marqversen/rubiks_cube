@@ -1,9 +1,12 @@
 use super::cube::{Move, MOVES};
 use super::indexers::*;
-use super::lookup_table::LookupTable2D;
+use crate::math::update_distance_mod3;
 use serde::{Deserialize, Serialize};
 
-pub type MoveTable = LookupTable2D<u16, 18>;
+#[derive(Serialize, Deserialize, Clone)]
+struct MoveTable {
+    data: Vec<u16>,
+}
 
 impl MoveTable {
     #[inline]
@@ -16,57 +19,72 @@ impl MoveTable {
         self.data[idx * 18 + mv as usize] = val;
     }
 
-    pub fn build<F: Indexer>() -> Self {
-        let mut table = Self::new(F::SIZE, u16::MAX);
-        for idx1 in 0..F::SIZE {
+    pub fn build<I: CubeIndexer>() -> Self {
+        let mut table = Self {
+            data: vec![0; I::SIZE * 18],
+        };
+        for idx1 in 0..I::SIZE {
             for mv in MOVES {
-                let mut cube = F::from_index(idx1);
+                let mut cube = I::from_index(idx1);
                 cube.turn(mv);
-                table.set(idx1, mv, F::to_index(&cube) as u16);
+                table.set(idx1, mv, I::to_index(&cube) as u16);
             }
         }
         table
     }
 }
 
-pub type PruningTable<const IDX2_WIDTH: usize> = LookupTable2D<u8, IDX2_WIDTH>;
+#[derive(Serialize, Deserialize, Clone)]
+struct PruningTable {
+    data: Vec<u32>,
+}
 
-impl<const IDX2_WIDTH: usize> PruningTable<IDX2_WIDTH> {
+impl PruningTable {
     #[inline]
-    pub fn get(&self, idx1: usize, idx2: usize) -> u8 {
-        self.data[idx1 * IDX2_WIDTH + idx2]
+    pub fn get(&self, index: usize, prev_distance: u32) -> u32 {
+        let mod3 = self.get_mod3(index);
+        update_distance_mod3(prev_distance, mod3)
+    }
+
+    #[inline]
+    fn get_mod3(&self, index: usize) -> u32 {
+        let u32_index = index >> 4;
+        let bit_offset = (index & 0xF) << 1;
+        let val = (self.data[u32_index] >> bit_offset) & 0b11; // mask to get 2 bits
+        val
+    }
+
+    #[inline]
+    fn set_mod3(&mut self, index: usize, val: u32) {
+        let u32_index = index >> 4;
+        let bit_offset = (index & 0xF) << 1;
+        self.data[u32_index] &= !(0b11 << bit_offset); // clear the bits
+        self.data[u32_index] |= (val % 3) << bit_offset; // set the new value
+    }
+
+    pub fn build(move_table: &MoveTable) -> Self {
+        let width = move_table.data.len() / 18;
+        let mut table = Self {
+            data: vec![0xFFFFFFFF; width / 16 + 1],
+        }; // Initialize all entries to 3 (0b11)
         
-        // Tightly packed mod 3 distances.
-        // let linear_index = idx1 * IDX2_WIDTH + idx2;
-        // let word_index = linear_index >> 4;          // divide by 16 (number of entries per u32)
-        // let bit_offset = (linear_index & 0xF) << 1;  // (mod 16) * 2
-        // (self.data[word_index] >> bit_offset) & 0b11
-    }
-
-    #[inline]
-    fn set(&mut self, idx1: usize, idx2: usize, val: u8) {
-        self.data[idx1 * IDX2_WIDTH + idx2] = val;
-    }
-
-    pub fn build(table1: &MoveTable, table2: &MoveTable) -> Self {
-        let mut table = Self::new(table1.idx1_width(), u8::MAX);
         let mut queue = std::collections::VecDeque::new();
 
         // Starting from solved state.
         // Assuming both indexers return 0 for the solved cube
-        const SOLVED: (usize, usize) = (0, 0);
-        table.set(SOLVED.0, SOLVED.1, 0); // Distance to solved state is 0
-        queue.push_back(SOLVED); // (idx1, idx2)
+        const SOLVED: usize = 0;
+        table.set_mod3(SOLVED, 0); // Distance to solved state is 0
+        queue.push_back(SOLVED);
 
-        while let Some((idx1, idx2)) = queue.pop_front() {
-            let dist = table.get(idx1, idx2);
+        while let Some(index) = queue.pop_front() {
+            let distance = table.get_mod3(index);
             for mv in MOVES {
-                let next_idx1 = table1.get(idx1, mv) as usize;
-                let next_idx2 = table2.get(idx2, mv) as usize;
+                let next_index = move_table.get(index, mv) as usize;
 
-                if table.get(next_idx1, next_idx2) == u8::MAX {
-                    table.set(next_idx1, next_idx2, dist + 1);
-                    queue.push_back((next_idx1, next_idx2));
+                if table.get_mod3(next_index) == 3 {
+                    // Not visited yet, set distance and push to queue
+                    table.set_mod3(next_index, distance + 1);
+                    queue.push_back(next_index);
                 }
             }
         }
@@ -86,11 +104,11 @@ pub struct KociembaTables {
     pub de_move: MoveTable,
 
     // Pruning tables
-    pub eo_es_prune: PruningTable<{ ESliceIndexer::SIZE }>,
-    pub co_es_prune: PruningTable<{ ESliceIndexer::SIZE }>,
-    pub cp_es_prune: PruningTable<{ ESliceIndexer::SIZE }>,
-    pub cp_ue_prune: PruningTable<{ UEdgeIndexer::SIZE }>,
-    pub cp_de_prune: PruningTable<{ DEdgeIndexer::SIZE }>,
+    pub eo_es_prune: PruningTable,
+    pub co_es_prune: PruningTable,
+    pub cp_es_prune: PruningTable,
+    pub cp_ue_prune: PruningTable,
+    pub cp_de_prune: PruningTable,
 }
 
 impl KociembaTables {
@@ -125,7 +143,7 @@ impl KociembaTables {
 
     pub fn build() -> Self {
         println!("Building Kociemba tables...");
-        
+
         // Move tables
         println!("Building move tables...");
         println!("Edge Orientation Move Table...");
@@ -140,7 +158,7 @@ impl KociembaTables {
         let ue_move = MoveTable::build::<UEdgeIndexer>();
         println!("D-Edge Move Table...");
         let de_move = MoveTable::build::<DEdgeIndexer>();
-        
+
         // Pruning tables
         println!("Building pruning tables...");
         println!("EO-ES Pruning Table...");

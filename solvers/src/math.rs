@@ -1,8 +1,9 @@
 const BINOM: [[usize; 5]; 13] = precompute_binomials();
 const FACTORIAL: [usize; 13] = precompute_factorials();
+const MOD3_DISTANCE_MAP: [[u32; 3]; 20] = precompute_mod3_distance_map();
 
 // Precompute binomial coefficients using Pascal's triangle.
-pub const fn precompute_binomials<const N: usize, const K: usize>() -> [[usize; K]; N] {
+const fn precompute_binomials<const N: usize, const K: usize>() -> [[usize; K]; N] {
     let mut table = [[0; K]; N];
 
     let mut n = 0;
@@ -24,7 +25,7 @@ pub const fn precompute_binomials<const N: usize, const K: usize>() -> [[usize; 
     table
 }
 
-pub const fn precompute_factorials<const N: usize>() -> [usize; N] {
+const fn precompute_factorials<const N: usize>() -> [usize; N] {
     let mut table = [1; N];
     let mut i = 1;
     while i < N {
@@ -32,6 +33,24 @@ pub const fn precompute_factorials<const N: usize>() -> [usize; N] {
         i += 1;
     }
     table
+}
+
+const fn precompute_mod3_distance_map<const MAX_DIST: usize>() -> [[u32; 3]; MAX_DIST] {
+    let mut map = [[0; 3]; MAX_DIST];
+    
+    // Handle i = 0 case (never accessed in practice - sentinel value)
+    map[0][0] = 0;
+    map[0][1] = 1;
+    map[0][2] = u32::MAX; // invalid transition implies new distance is -1
+    
+    let mut i = 1;
+    while i < MAX_DIST {
+        map[i][(i - 1) % 3] = (i - 1) as u32;
+        map[i][i % 3] = i as u32;
+        map[i][(i + 1) % 3] = (i + 1) as u32;
+        i += 1;
+    }
+    map
 }
 
 pub fn compute_permutation<T: PartialEq + Copy, const N: usize>(
@@ -123,6 +142,10 @@ pub fn combination_unrank<const N: usize, const K: usize>(mut rank: usize) -> [b
         }
     }
     selected
+}
+
+pub fn update_distance_mod3(current_distance: u32, next_distance_mod3: u32) -> u32 {
+    MOD3_DISTANCE_MAP[current_distance as usize][next_distance_mod3 as usize]
 }
 
 #[cfg(test)]

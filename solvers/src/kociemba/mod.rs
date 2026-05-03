@@ -3,7 +3,6 @@ use super::solver::Solver;
 
 mod solver;
 mod indexers;
-mod lookup_table;
 mod kociemba_tables;
 mod phase_solvers;
 

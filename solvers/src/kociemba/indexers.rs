@@ -1,7 +1,7 @@
 use super::cube::{Corner, Cube, Edge, CORNERS, EDGES};
 use crate::math::*;
 
-pub trait Indexer {
+pub trait CubeIndexer {
     const SIZE: usize;
 
     /// Maps a cube state to an index in [0, SIZE).
@@ -23,7 +23,7 @@ pub struct ESliceIndexer;
 pub struct UEdgeIndexer;
 pub struct DEdgeIndexer;
 
-impl Indexer for EdgeOrientationIndexer {
+impl CubeIndexer for EdgeOrientationIndexer {
     const SIZE: usize = 2048; // 2^11 possible orientations
 
     fn to_index(cube: &Cube) -> usize {
@@ -55,7 +55,7 @@ impl Indexer for EdgeOrientationIndexer {
     }
 }
 
-impl Indexer for CornerOrientationIndexer {
+impl CubeIndexer for CornerOrientationIndexer {
     const SIZE: usize = 2187; // 3^7 possible orientations
 
     fn to_index(cube: &Cube) -> usize {
@@ -87,7 +87,7 @@ impl Indexer for CornerOrientationIndexer {
     }
 }
 
-impl Indexer for CornerPermutationIndexer {
+impl CubeIndexer for CornerPermutationIndexer {
     const SIZE: usize = 40320; // 8! possible permutations
 
     fn to_index(cube: &Cube) -> usize {
@@ -111,7 +111,7 @@ impl Indexer for CornerPermutationIndexer {
 
 /// Tracks the location of the 4 E-slice edges among all edge positions
 /// as well as their mutual relative permutation.
-impl Indexer for ESliceIndexer {
+impl CubeIndexer for ESliceIndexer {
     const SIZE: usize = 11880; // (12 choose 4) * 4! = 495 * 24
 
     fn to_index(cube: &Cube) -> usize {
@@ -128,7 +128,7 @@ impl Indexer for ESliceIndexer {
         }
         let combination_index = combination_rank::<12, 4>(&selected);
         let permutation_index = permutation_rank::<4>(&compute_permutation(&E_SLICE, &slice_edges));
-        
+
         let index = combination_index * 24 + permutation_index;
         (index + (Self::SIZE - 1656)) % Self::SIZE // Shift so that solved state has index 0
     }
@@ -162,7 +162,7 @@ impl Indexer for ESliceIndexer {
 
 /// Tracks the location of the 4 U-face edges among all edge positions
 /// as well as their mutual relative permutation.
-impl Indexer for UEdgeIndexer {
+impl CubeIndexer for UEdgeIndexer {
     const SIZE: usize = 11880; // (12 choose 4) * 4! = 495 * 24
 
     fn to_index(cube: &Cube) -> usize {
@@ -207,7 +207,7 @@ impl Indexer for UEdgeIndexer {
     }
 }
 
-impl Indexer for DEdgeIndexer {
+impl CubeIndexer for DEdgeIndexer {
     const SIZE: usize = 11880; // (12 choose 4) * 4! = 495 * 24
 
     fn to_index(cube: &Cube) -> usize {
@@ -258,7 +258,7 @@ impl Indexer for DEdgeIndexer {
 
 // impl Indexer for UDEdgePermutationIndexer {
 //     const SIZE: usize = 40320; // 8! possible permutations of the 8 U and D edges
-    
+
 //     fn to_index(cube: &Cube) -> usize {
 //         unimplemented!()
 //     }
@@ -267,116 +267,63 @@ impl Indexer for DEdgeIndexer {
 //         unimplemented!()
 //     }
 
-    // def get_ud_edges(self):
-    //     """Get the permutation of the 8 U and D edges.
-    //         ud_edges undefined in phase 1, 0 <= ud_edges < 40320 in phase 2, ud_edges = 0 for solved cube."""
-    //     perm = self.ep[0:8]  # duplicate first 8 elements of ep
-    //     b = 0
-    //     for j in range(Ed.DB, Ed.UR, -1):
-    //         k = 0
-    //         while perm[j] != j:
-    //             rotate_left(perm, 0, j)
-    //             k += 1
-    //         b = (j + 1) * b + k
-    //     return b
+// def get_ud_edges(self):
+//     """Get the permutation of the 8 U and D edges.
+//         ud_edges undefined in phase 1, 0 <= ud_edges < 40320 in phase 2, ud_edges = 0 for solved cube."""
+//     perm = self.ep[0:8]  # duplicate first 8 elements of ep
+//     b = 0
+//     for j in range(Ed.DB, Ed.UR, -1):
+//         k = 0
+//         while perm[j] != j:
+//             rotate_left(perm, 0, j)
+//             k += 1
+//         b = (j + 1) * b + k
+//     return b
 
-    // def set_ud_edges(self, idx):
-    //     # positions of FR FL BL BR edges are not affected
-    //     for i in list(Ed)[0:8]:
-    //         self.ep[i] = i
-    //     for j in list(Ed)[0:8]:
-    //         k = idx % (j + 1)
-    //         idx //= j + 1
-    //         while k > 0:
-    //             rotate_right(self.ep, 0, j)
-    //             k -= 1
+// def set_ud_edges(self, idx):
+//     # positions of FR FL BL BR edges are not affected
+//     for i in list(Ed)[0:8]:
+//         self.ep[i] = i
+//     for j in list(Ed)[0:8]:
+//         k = idx % (j + 1)
+//         idx //= j + 1
+//         while k > 0:
+//             rotate_right(self.ep, 0, j)
+//             k -= 1
 // }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    type EO = EdgeOrientationIndexer;
-    type CO = CornerOrientationIndexer;
-    type CP = CornerPermutationIndexer;
-    type ES = ESliceIndexer;
-    type UE = UEdgeIndexer;
-    type DE = DEdgeIndexer;
 
-    #[test]
-    fn eo_zero_index() {
-        assert_eq!(EO::to_index(&Cube::solved()), 0);
-    }
+    macro_rules! test_indexer {
+        ($mod_name:ident, $indexer:ty) => {
+            mod $mod_name {
+                use super::*;
 
-    #[test]
-    fn co_zero_index() {
-        assert_eq!(CO::to_index(&Cube::solved()), 0);
-    }
+                #[test]
+                fn solved_index() {
+                    assert_eq!(
+                        <$indexer>::to_index(&Cube::solved()),
+                        <$indexer>::SOLVED_INDEX
+                    );
+                }
 
-    #[test]
-    fn cp_zero_index() {
-        assert_eq!(CP::to_index(&Cube::solved()), 0);
-    }
-
-    #[test]
-    fn es_zero_index() {
-        assert_eq!(ES::to_index(&Cube::solved()), 0);
+                #[test]
+                fn consistency() {
+                    for i in 0..<$indexer>::SIZE {
+                        let test = <$indexer>::to_index(&<$indexer>::from_index(i));
+                        assert_eq!(i, test, "Failed for index {}", i);
+                    }
+                }
+            }
+        };
     }
 
-    #[test]
-    fn ue_zero_index() {
-        assert_eq!(UE::to_index(&Cube::solved()), 0);
-    }
-
-    #[test]
-    fn de_zero_index() {
-        assert_eq!(DE::to_index(&Cube::solved()), 0);
-    }
-
-    #[test]
-    fn eo_indexing_consistency() {
-        for i in 0..EO::SIZE {
-            let test = EO::to_index(&EO::from_index(i));
-            assert_eq!(i, test, "Failed for index {i}");
-        }
-    }
-
-    #[test]
-    fn co_indexing_consistency() {
-        for i in 0..CO::SIZE {
-            let test = CO::to_index(&CO::from_index(i));
-            assert_eq!(i, test, "Failed for index {i}");
-        }
-    }
-    
-    #[test]
-    fn cp_indexing_consistency() {
-        for i in 0..CP::SIZE {
-            let test = CP::to_index(&CP::from_index(i));
-            assert_eq!(i, test, "Failed for index {i}");
-        }
-    }
-
-    #[test]
-    fn es_indexing_consistency() {
-        for i in 0..ES::SIZE {
-            let test = ES::to_index(&ES::from_index(i));
-            assert_eq!(i, test, "Failed for index {i}");
-        }
-    }
-
-    #[test]
-    fn ue_indexing_consistency() {
-        for i in 0..UE::SIZE {
-            let test = UE::to_index(&UE::from_index(i));
-            assert_eq!(i, test, "Failed for index {i}");
-        }
-    }
-
-    #[test]
-    fn de_indexing_consistency() {
-        for i in 0..DE::SIZE {
-            let test = DE::to_index(&DE::from_index(i));
-            assert_eq!(i, test, "Failed for index {i}");
-        }
-    }
+    test_indexer!(eo, EdgeOrientationIndexer);
+    test_indexer!(co, CornerOrientationIndexer);
+    test_indexer!(cp, CornerPermutationIndexer);
+    test_indexer!(es, ESliceIndexer);
+    test_indexer!(ue, UEdgeIndexer);
+    test_indexer!(de, DEdgeIndexer);
 }
