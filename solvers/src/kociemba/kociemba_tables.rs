@@ -1,4 +1,4 @@
-use super::cube::{Cube, Move, MOVES, Moveable};
+use super::cube::{Cube, Move, Moveable, MOVES};
 use super::indexers::*;
 use crate::math::update_distance_mod3;
 use serde::{Deserialize, Serialize};
@@ -10,18 +10,21 @@ pub struct IndexMoveTable {
 
 impl IndexMoveTable {
     #[inline]
-    pub fn get(&self, idx: usize, mv: Move) -> u16 {
-        self.data[idx * 18 + mv as usize]
+    pub fn get(&self, idx: usize, mv: Move) -> usize {
+        self.data[idx * 18 + mv as usize] as usize
     }
 
     #[inline]
-    fn set(&mut self, idx: usize, mv: Move, val: u16) {
-        self.data[idx * 18 + mv as usize] = val;
+    fn set(&mut self, idx: usize, mv: Move, val: usize) {
+        self.data[idx * 18 + mv as usize] = val as u16;
     }
 
     pub fn build<T: Moveable, I: Indexer<T>>() -> Self {
-        assert!(I::SIZE <= u16::MAX as usize, "Indexer size too large for MoveTable");
-        
+        assert!(
+            I::SIZE <= u16::MAX as usize,
+            "Indexer size too large for MoveTable"
+        );
+
         let mut table = Self {
             data: vec![0; I::SIZE * 18],
         };
@@ -29,7 +32,7 @@ impl IndexMoveTable {
             for mv in MOVES {
                 let mut state = I::from_index(idx1);
                 state.turn(mv);
-                table.set(idx1, mv, I::to_index(&state) as u16);
+                table.set(idx1, mv, I::to_index(&state));
             }
         }
         table
@@ -39,13 +42,21 @@ impl IndexMoveTable {
 #[derive(Serialize, Deserialize)]
 pub struct PruningTable {
     data: Vec<u32>,
+    solved_index: usize,
 }
 
 impl PruningTable {
+    /// Get distance estimate given previous depth estimate
     #[inline]
     pub fn get(&self, index: usize, prev_distance: u32) -> u32 {
         let mod3 = self.get_mod3(index);
         update_distance_mod3(prev_distance, mod3)
+    }
+
+    /// Get initial distance lower bound (just the mod-3 value)
+    #[inline]
+    pub fn get_initial(&self, index: usize) -> u32 {
+        self.get_mod3(index)
     }
 
     #[inline]
@@ -64,33 +75,63 @@ impl PruningTable {
         self.data[u32_index] |= (val % 3) << bit_offset; // set the new value
     }
 
-    pub fn build(move_table: &IndexMoveTable, solved_index: usize) -> Self {
-        let width = move_table.data.len() / 18;
+    pub fn build<T: Moveable + Copy, I: Indexer<T>>(solved: T, moves: &[Move]) -> Self {
         let mut table = Self {
-            data: vec![0xFFFFFFFF; width >> 4 + 1],
+            data: vec![0xFFFFFFFF; (I::SIZE >> 4) + 1],
+            solved_index: I::to_index(&solved),
         }; // Initialize all entries to 3 (0b11)
-        
+
         let mut queue = std::collections::VecDeque::new();
 
         // Starting from solved state.
-        table.set_mod3(solved_index, 0); // Distance to solved state is 0
-        queue.push_back(solved_index);
+        table.set_mod3(table.solved_index, 0); // Distance to solved state is 0
+        queue.push_back(solved);
 
-        while let Some(index) = queue.pop_front() {
-            let distance = table.get_mod3(index);
-            for mv in MOVES {
-                let next_index = move_table.get(index, mv) as usize;
-
+        while let Some(state) = queue.pop_front() {
+            let distance = table.get_mod3(I::to_index(&state));
+            for &mv in moves {
+                let mut next = state;
+                next.turn(mv);
+                let next_index = I::to_index(&next);
                 if table.get_mod3(next_index) == 3 {
                     // Not visited yet, set distance and push to queue
                     table.set_mod3(next_index, distance + 1);
-                    queue.push_back(next_index);
+                    queue.push_back(next);
                 }
             }
         }
 
         table
     }
+}
+
+pub fn compute_min_distance<T: Moveable + Copy, I: Indexer<T>>(
+    state: T,
+    prune_table: &PruningTable,
+    moves: &[Move],
+) -> u32 {
+    let mut distance = 0;
+    let mut current = state;
+    let mut current_index = I::to_index(&current);
+    let mut current_mod3 = prune_table.get_mod3(current_index);
+    while current_index != prune_table.solved_index {
+        if current_mod3 == 0 {
+            current_mod3 = 3;
+        }
+        for &mv in moves {
+            let mut next = current;
+            next.turn(mv);
+            let next_index = I::to_index(&next);
+            if prune_table.get(next_index, current_mod3) < current_mod3 {
+                current = next;
+                current_index = next_index;
+                current_mod3 = prune_table.get_mod3(current_index);
+                distance += 1;
+                break;
+            }
+        }
+    }
+    distance
 }
 
 #[derive(Serialize, Deserialize)]
@@ -163,17 +204,17 @@ impl KociembaTables {
         // Pruning tables
         println!("Building pruning tables...");
         println!("EO Pruning Table...");
-        let eo_prune = PruningTable::build(&eo_move, EdgeOrientationIndexer::SOLVED_INDEX);
+        let eo_prune = PruningTable::build::<(usize, &IndexMoveTable), EdgeOrientationIndexer>((0, &eo_move), &MOVES);
         println!("CO Pruning Table...");
-        let co_prune = PruningTable::build(&co_move, CornerOrientationIndexer::SOLVED_INDEX);
+        let co_prune = PruningTable::build::<(usize, &IndexMoveTable), CornerOrientationIndexer>((0, &co_move), &MOVES);
         println!("CP Pruning Table...");
-        let cp_prune = PruningTable::build(&cp_move, CornerPermutationIndexer::SOLVED_INDEX);
+        let cp_prune = PruningTable::build::<(usize, &IndexMoveTable), CornerPermutationIndexer>((0, &cp_move), &MOVES);
         println!("ES Pruning Table...");
-        let es_prune = PruningTable::build(&es_move, ESliceIndexer::SOLVED_INDEX);
+        let es_prune = PruningTable::build::<(usize, &IndexMoveTable), ESliceIndexer>((0, &es_move), &MOVES);
         println!("UE Pruning Table...");
-        let ue_prune = PruningTable::build(&ue_move, UEdgeIndexer::SOLVED_INDEX);
+        let ue_prune = PruningTable::build::<(usize, &IndexMoveTable), UEdgeIndexer>((0, &ue_move), &MOVES);
         println!("DE Pruning Table...");
-        let de_prune = PruningTable::build(&de_move, DEdgeIndexer::SOLVED_INDEX);
+        let de_prune = PruningTable::build::<(usize, &IndexMoveTable), DEdgeIndexer>((0, &de_move), &MOVES);
 
         Self {
             eo_move,
@@ -189,5 +230,32 @@ impl KociembaTables {
             ue_prune,
             de_prune,
         }
+    }
+}
+
+
+
+
+
+
+
+// Impls for simple implementation and testing
+impl Moveable for (usize, &IndexMoveTable) {
+    fn turn(&mut self, mv: Move) -> &mut Self {
+        let (idx, table) = self;
+        *idx = table.get(*idx, mv);
+        self
+    }
+}
+
+impl<T: Indexer<Cube>> Indexer<(usize, &IndexMoveTable)> for T {
+    const SIZE: usize = T::SIZE;
+
+    fn to_index(state: &(usize, &IndexMoveTable)) -> usize {
+        state.0
+    }
+
+    fn from_index(_idx: usize) -> (usize, &'static IndexMoveTable) {
+        unimplemented!("This is a helper struct for move tables and should not be used directly")
     }
 }

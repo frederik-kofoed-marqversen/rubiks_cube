@@ -1,11 +1,30 @@
 use super::cube::{Cube, Move, MOVES};
 use super::indexers::*;
+use super::kociemba_tables::{compute_min_distance, IndexMoveTable};
 use super::KociembaTables;
+
+pub const MOVES_PHASE1: [Move; 18] = MOVES;
+pub const MOVES_PHASE2: [Move; 10] = [
+    Move::R2,
+    Move::L2,
+    Move::U, Move::Up, Move::U2,
+    Move::D, Move::Dp, Move::D2,
+    Move::F2,
+    Move::B2,
+];
 
 pub trait PhaseState: Copy {
     fn is_solved(&self) -> bool;
     fn turn(&self, mv: Move, tables: &KociembaTables) -> Self;
-    fn heuristic(&self, tables: &KociembaTables, prev_distance: u32) -> u32;
+    fn heuristic(&self) -> u32;
+
+    fn apply_moves(&self, moves: &[Move], tables: &KociembaTables) -> Self {
+        let mut state = *self;
+        for &mv in moves {
+            state = state.turn(mv, tables);
+        }
+        state
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -13,36 +32,72 @@ pub struct Phase1State {
     pub eo: usize,
     pub co: usize,
     pub es: usize,
+
+    pub eo_dist: u32,
+    pub co_dist: u32,
+    pub es_dist: u32,
 }
 
 impl Phase1State {
-    pub fn from_cube(cube: &Cube) -> Self {
+    pub fn from_cube(cube: &Cube, tables: &KociembaTables) -> Self {
+        let eo = EdgeOrientationIndexer::to_index(cube);
+        let co = CornerOrientationIndexer::to_index(cube);
+        let es = ESliceIndexer::to_index(cube);
+        
+        // Use compute_min_distance to get actual distances, not just mod-3 lower bounds
+        // This is needed because get() requires actual distances for incremental updates
+        let eo_dist = compute_min_distance::<(usize, &IndexMoveTable), EdgeOrientationIndexer>(
+            (eo, &tables.eo_move),
+            &tables.eo_prune,
+            &MOVES_PHASE1,
+        );
+        let co_dist = compute_min_distance::<(usize, &IndexMoveTable), CornerOrientationIndexer>(
+            (co, &tables.co_move),
+            &tables.co_prune,
+            &MOVES_PHASE1,
+        );
+        let es_dist = compute_min_distance::<(usize, &IndexMoveTable), ESliceIndexer>(
+            (es, &tables.es_move),
+            &tables.es_prune,
+            &MOVES_PHASE1,
+        );
+
         Self {
-            eo: EdgeOrientationIndexer::to_index(cube),
-            co: CornerOrientationIndexer::to_index(cube),
-            es: ESliceIndexer::to_index(cube),
+            eo,
+            co,
+            es,
+            eo_dist,
+            co_dist,
+            es_dist,
         }
     }
 }
 
 impl PhaseState for Phase1State {
     fn is_solved(&self) -> bool {
-        self.eo == 0 && self.co == 0 && self.es / 24 == 0
+        self.eo == 0 && self.co == 0 && self.es == 0
     }
 
     fn turn(&self, mv: Move, tables: &KociembaTables) -> Self {
+        let eo = tables.eo_move.get(self.eo, mv);
+        let co = tables.co_move.get(self.co, mv);
+        let es = tables.es_move.get(self.es, mv);
+        let eo_dist = tables.eo_prune.get(eo, self.eo_dist);
+        let co_dist = tables.co_prune.get(co, self.co_dist);
+        let es_dist = tables.es_prune.get(es, self.es_dist);
+
         Self {
-            eo: tables.eo_move.get(self.eo, mv) as usize,
-            co: tables.co_move.get(self.co, mv) as usize,
-            es: tables.es_move.get(self.es, mv) as usize,
+            eo,
+            co,
+            es,
+            eo_dist,
+            co_dist,
+            es_dist,
         }
     }
 
-    fn heuristic(&self, tables: &KociembaTables, prev_distance: u32) -> u32 {
-        let h1 = tables.eo_prune.get(self.eo, prev_distance);
-        let h2 = tables.co_prune.get(self.co, prev_distance);
-        let h3 = tables.es_prune.get(self.es, prev_distance);
-        h1.max(h2).max(h3)
+    fn heuristic(&self) -> u32 {
+        self.eo_dist.max(self.co_dist).max(self.es_dist)
     }
 }
 
@@ -52,24 +107,51 @@ pub struct Phase2State {
     pub es: usize,
     pub ue: usize,
     pub de: usize,
+
+    pub cp_dist: u32,
+    pub es_dist: u32,
+    pub ue_dist: u32,
+    pub de_dist: u32,
 }
 
 impl Phase2State {
-    pub fn from_cube(cube: &Cube) -> Self {
-        Self {
-            cp: CornerPermutationIndexer::to_index(cube),
-            es: ESliceIndexer::to_index(cube),
-            ue: UEdgeIndexer::to_index(cube),
-            de: DEdgeIndexer::to_index(cube),
-        }
-    }
+    pub fn from_cube(cube: &Cube, tables: &KociembaTables) -> Self {
+        let cp = CornerPermutationIndexer::to_index(cube);
+        let es = ESliceIndexer::to_index(cube);
+        let ue = UEdgeIndexer::to_index(cube);
+        let de = DEdgeIndexer::to_index(cube);
 
-    pub fn apply_moves(&self, moves: &[Move], tables: &KociembaTables) -> Self {
-        let mut state = *self;
-        for &mv in moves {
-            state = state.turn(mv, tables);
+        let cp_dist = compute_min_distance::<(usize, &IndexMoveTable), CornerPermutationIndexer>(
+            (cp, &tables.cp_move),
+            &tables.cp_prune,
+            &MOVES_PHASE2,
+        );
+        let es_dist = compute_min_distance::<(usize, &IndexMoveTable), ESliceIndexer>(
+            (es, &tables.es_move),
+            &tables.es_prune,
+            &MOVES_PHASE2,
+        );
+        let ue_dist = compute_min_distance::<(usize, &IndexMoveTable), UEdgeIndexer>(
+            (ue, &tables.ue_move),
+            &tables.ue_prune,
+            &MOVES_PHASE2,
+        );
+        let de_dist = compute_min_distance::<(usize, &IndexMoveTable), DEdgeIndexer>(
+            (de, &tables.de_move),
+            &tables.de_prune,
+            &MOVES_PHASE2,
+        );
+
+        Self {
+            cp,
+            es,
+            ue,
+            de,
+            cp_dist,
+            es_dist,
+            ue_dist,
+            de_dist,
         }
-        state
     }
 }
 
@@ -79,20 +161,33 @@ impl PhaseState for Phase2State {
     }
 
     fn turn(&self, mv: Move, tables: &KociembaTables) -> Self {
+        let cp = tables.cp_move.get(self.cp, mv);
+        let es = tables.es_move.get(self.es, mv);
+        let ue = tables.ue_move.get(self.ue, mv);
+        let de = tables.de_move.get(self.de, mv);
+
+        let cp_dist = tables.cp_prune.get(cp, self.cp_dist);
+        let es_dist = tables.es_prune.get(es, self.es_dist);
+        let ue_dist = tables.ue_prune.get(ue, self.ue_dist);
+        let de_dist = tables.de_prune.get(de, self.de_dist);
+
         Self {
-            cp: tables.cp_move.get(self.cp, mv) as usize,
-            es: tables.es_move.get(self.es, mv) as usize,
-            ue: tables.ue_move.get(self.ue, mv) as usize,
-            de: tables.de_move.get(self.de, mv) as usize,
+            cp,
+            es,
+            ue,
+            de,
+            cp_dist,
+            es_dist,
+            ue_dist,
+            de_dist,
         }
     }
 
-    fn heuristic(&self, tables: &KociembaTables, prev_distance: u32) -> u32 {
-        let h1 = tables.cp_prune.get(self.cp, prev_distance);
-        let h2 = tables.es_prune.get(self.es, prev_distance);
-        let h3 = tables.ue_prune.get(self.ue, prev_distance);
-        let h4 = tables.de_prune.get(self.de, prev_distance);
-        h1.max(h2).max(h3).max(h4)
+    fn heuristic(&self) -> u32 {
+        self.cp_dist
+            .max(self.es_dist)
+            .max(self.ue_dist)
+            .max(self.de_dist)
     }
 }
 
@@ -115,20 +210,21 @@ fn is_valid_move(prev_opt: Option<&Move>, next: Move) -> bool {
     true
 }
 
-pub fn solve_phase<S: PhaseState>(start: S, tables: &KociembaTables, max_depth: u32) -> Vec<Move> {
-    let mut bound = start.heuristic(tables, 0);
-
-    if bound == 0 {
+pub fn solve_phase<S: PhaseState>(start: S, tables: &KociembaTables, max_depth: u32, moves: &[Move]) -> Vec<Move> {
+    if start.is_solved() {
         return Vec::new();
     }
 
+    let mut bound = start.heuristic();
+    println!("Initial heuristic bound: {}", bound);
     loop {
         if bound > max_depth {
-            panic!("Failed to find a solution within {} moves", max_depth);
+            panic!("Failed to find a solution within {max_depth} moves");
         }
+        println!("Searching with bound {}...", bound);
 
         let mut path = Vec::new();
-        if dfs(start, 0, bound, &mut path, tables) {
+        if dfs(start, 0, bound, &mut path, tables, moves) {
             return path;
         }
 
@@ -142,22 +238,24 @@ fn dfs<S: PhaseState>(
     bound: u32,
     path: &mut Vec<Move>,
     tables: &KociembaTables,
+    moves: &[Move],
 ) -> bool {
-    if depth + state.heuristic(tables, 0) > bound {
+    let h = state.heuristic();
+    if depth + h > bound {
         return false;
     }
     if state.is_solved() {
         return true;
     }
 
-    for mv in MOVES {
+    for &mv in moves {
         if !is_valid_move(path.last(), mv) {
             continue;
         }
 
         let next_state = state.turn(mv, tables);
         path.push(mv);
-        if dfs(next_state, depth + 1, bound, path, tables) {
+        if dfs(next_state, depth + 1, bound, path, tables, moves) {
             return true;
         }
         path.pop();
@@ -264,53 +362,75 @@ fn dfs<S: PhaseState>(
 //                 self.search_phase2(corners_new, ud_edges_new, slice_sorted_new, dist_new, togo_phase2 - 1)
 //                 self.sofar_phase2.pop(-1)
 
-// #[cfg(test)]
-// mod tests {
-//     use super::super::cube::Cube;
-//     use super::Move::*;
-//     use super::*;
-//     use std::sync::LazyLock;
+#[cfg(test)]
+mod tests {
+    use super::super::cube::{Cube, Moveable};
+    use super::Move::*;
+    use super::*;
+    use std::sync::LazyLock;
 
-//     static TABLES: LazyLock<KociembaTables> = LazyLock::new(KociembaTables::build);
+    static TABLES: LazyLock<KociembaTables> = LazyLock::new(KociembaTables::build);
 
-//     #[test]
-//     fn phase1_solved_cube() {
-//         let cube = Cube::solved();
-//         let state = Phase1State::from_cube(&cube);
-//         let solution = solve_phase(state, &TABLES, 20);
-//         assert_eq!(solution.len(), 0, "Solved cube needs 0 moves");
-//     }
+    #[test]
+    fn phase1_solved_cube() {
+        let cube = Cube::solved();
+        let state = Phase1State::from_cube(&cube, &TABLES);
+        let solution = solve_phase(state, &TABLES, 20, &MOVES_PHASE1);
+        assert_eq!(solution.len(), 0, "Solved cube needs 0 moves");
+    }
 
-//     #[test]
-//     fn phase1_simple_scramble() {
-//         let mut cube = Cube::solved();
-//         cube.turn(F);
+    #[test]
+    fn phase1_simple_scramble() {
+        let mut cube = Cube::solved();
+        cube.turn(F);
 
-//         let state = Phase1State::from_cube(&cube);
-//         let solution = solve_phase(state, &TABLES, 20);
+        let state = Phase1State::from_cube(&cube, &TABLES);
+        let solution = solve_phase(state, &TABLES, 20, &MOVES_PHASE1);
 
-//         // Verify solution
-//         cube.apply_moves(&solution);
-//         let final_state = Phase1State::from_cube(&cube);
-//         assert!(final_state.is_solved(), "Phase 1 should reach goal state");
-//     }
+        // Verify solution
+        cube.apply_moves(&solution);
+        let final_state = Phase1State::from_cube(&cube, &TABLES);
+        assert!(final_state.is_solved(), "Phase 1 should reach goal state");
+    }
 
-//     #[test]
-//     fn phase1_short_scramble() {
-//         let scramble = vec![R, U, Rp, Up];
-//         let mut cube = Cube::solved();
-//         cube.apply_moves(&scramble);
+    #[test]
+    fn phase1_short_scramble() {
+        let scramble = vec![R, U, Rp, Up];
+        let mut cube = Cube::solved();
+        cube.apply_moves(&scramble);
 
-//         let state = Phase1State::from_cube(&cube);
-//         let solution = solve_phase(state, &TABLES, 20);
-//         assert!(solution.len() <= 10, "Short scramble should solve quickly");
+        let state = Phase1State::from_cube(&cube, &TABLES);
+        let solution = solve_phase(state, &TABLES, 20, &MOVES_PHASE1);
+        assert!(solution.len() <= 10, "Short scramble should solve quickly");
 
-//         // Verify solution
-//         cube.apply_moves(&solution);
-//         let final_state = Phase1State::from_cube(&cube);
-//         assert!(
-//             final_state.is_solved(),
-//             "Solution should reach Phase 1 goal"
-//         );
-//     }
-// }
+        // Verify solution
+        cube.apply_moves(&solution);
+        let final_state = Phase1State::from_cube(&cube, &TABLES);
+        assert!(
+            final_state.is_solved(),
+            "Solution should reach Phase 1 goal"
+        );
+    }
+
+    #[test]
+    fn phase2_solved_cube() {
+        let cube = Cube::solved();
+        let state = Phase2State::from_cube(&cube, &TABLES);
+        let solution = solve_phase(state, &TABLES, 18, &MOVES_PHASE2);
+        assert_eq!(solution.len(), 0, "Solved cube needs 0 moves");
+    }
+
+    #[test]
+    fn phase2_simple_scramble() {
+        let mut cube = Cube::solved();
+        cube.turn(R2).turn(U2).turn(D).turn(R2); // This is a valid Phase 1 solution, so Phase 2 should solve it
+
+        let state = Phase2State::from_cube(&cube, &TABLES);
+        let solution = solve_phase(state, &TABLES, 18, &MOVES_PHASE2);
+
+        // Verify solution
+        cube.apply_moves(&solution);
+        let final_state = Phase2State::from_cube(&cube, &TABLES);
+        assert!(final_state.is_solved(), "Phase 2 should reach goal state");
+    }
+}
