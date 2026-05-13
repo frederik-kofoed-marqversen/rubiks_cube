@@ -1,5 +1,6 @@
 use super::cube::{Cube, Move, Moveable, MOVES};
 use super::indexers::*;
+use crate::kociemba::phase_solvers::{MOVES_PHASE1, MOVES_PHASE2};
 use crate::math::update_distance_mod3;
 use serde::{Deserialize, Serialize};
 
@@ -204,17 +205,17 @@ impl KociembaTables {
         // Pruning tables
         println!("Building pruning tables...");
         println!("EO Pruning Table...");
-        let eo_prune = PruningTable::build::<(usize, &IndexMoveTable), EdgeOrientationIndexer>((0, &eo_move), &MOVES);
+        let eo_prune = PruningTable::build::<(usize, &IndexMoveTable), EdgeOrientationIndexer>((0, &eo_move), &MOVES_PHASE1);
         println!("CO Pruning Table...");
-        let co_prune = PruningTable::build::<(usize, &IndexMoveTable), CornerOrientationIndexer>((0, &co_move), &MOVES);
+        let co_prune = PruningTable::build::<(usize, &IndexMoveTable), CornerOrientationIndexer>((0, &co_move), &MOVES_PHASE1);
         println!("CP Pruning Table...");
-        let cp_prune = PruningTable::build::<(usize, &IndexMoveTable), CornerPermutationIndexer>((0, &cp_move), &MOVES);
+        let cp_prune = PruningTable::build::<(usize, &IndexMoveTable), CornerPermutationIndexer>((0, &cp_move), &MOVES_PHASE2);
         println!("ES Pruning Table...");
-        let es_prune = PruningTable::build::<(usize, &IndexMoveTable), ESliceIndexer>((0, &es_move), &MOVES);
+        let es_prune = PruningTable::build::<(usize, &IndexMoveTable), ESliceIndexer>((0, &es_move), &MOVES_PHASE1);
         println!("UE Pruning Table...");
-        let ue_prune = PruningTable::build::<(usize, &IndexMoveTable), UEdgeIndexer>((0, &ue_move), &MOVES);
+        let ue_prune = PruningTable::build::<(usize, &IndexMoveTable), UEdgeIndexer>((0, &ue_move), &MOVES_PHASE2);
         println!("DE Pruning Table...");
-        let de_prune = PruningTable::build::<(usize, &IndexMoveTable), DEdgeIndexer>((0, &de_move), &MOVES);
+        let de_prune = PruningTable::build::<(usize, &IndexMoveTable), DEdgeIndexer>((0, &de_move), &MOVES_PHASE2);
 
         Self {
             eo_move,

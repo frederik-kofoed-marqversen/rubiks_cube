@@ -1,7 +1,6 @@
 ## Functionality
-Phase 2 indexers move tables and pruning tables
-Parallelize table building
-Mod 3 reduction of pruning tables
+Cleanup compute min distance
+Remove let mut next = current; next.turn(mv); pattern?
 Symmetry reduction
 Add commented methods to Cube 
 Continuous solution improvement (keep searching for better solutions after first is found)
