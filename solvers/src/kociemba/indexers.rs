@@ -38,13 +38,13 @@ impl Indexer<Cube> for EdgeOrientationIndexer {
     }
 
     fn from_index(index: usize) -> Cube {
-        let mut cube = Cube::solved();
+        let mut cube = Cube::new_solved();
 
         // Decode the 11 edge orientations from the index
         let mut remaining_index = index;
         let mut sum = 0;
         for &edge in EDGES[..11].iter().rev() {
-            let bit = (remaining_index & 1) as u8;
+            let bit = (remaining_index & 1) as u32;
             cube.set_edge_orientation(edge, bit);
             sum += bit;
             remaining_index >>= 1;
@@ -70,13 +70,13 @@ impl Indexer<Cube> for CornerOrientationIndexer {
     }
 
     fn from_index(index: usize) -> Cube {
-        let mut cube = Cube::solved();
+        let mut cube = Cube::new_solved();
 
         // Decode the 7 corner orientations from the index (base-3 number)
         let mut remaining_index = index;
         let mut sum = 0;
         for &corner in CORNERS[..7].iter().rev() {
-            let orientation = (remaining_index % 3) as u8;
+            let orientation = (remaining_index % 3) as u32;
             cube.set_corner_orientation(corner, orientation);
             sum += orientation;
             remaining_index /= 3;
@@ -102,7 +102,7 @@ impl Indexer<Cube> for CornerPermutationIndexer {
     }
 
     fn from_index(index: usize) -> Cube {
-        let mut cube = Cube::solved();
+        let mut cube = Cube::new_solved();
         let permutation: [usize; 8] = permutation_unrank::<8>(index);
         for (i, &pos) in CORNERS.iter().enumerate() {
             cube.set_corner_type(pos, CORNERS[permutation[i]]);
@@ -138,7 +138,7 @@ impl Indexer<Cube> for ESliceIndexer {
     fn from_index(index: usize) -> Cube {
         let index = (index + 1656) % 11880; // Shift back to original indexing
 
-        let mut cube = Cube::solved();
+        let mut cube = Cube::new_solved();
         let combination_index = index / 24;
         let permutation_index = index % 24;
 
@@ -185,7 +185,7 @@ impl Indexer<Cube> for UEdgeIndexer {
     }
 
     fn from_index(index: usize) -> Cube {
-        let mut cube = Cube::solved();
+        let mut cube = Cube::new_solved();
         let combination_index = index / 24;
         let permutation_index = index % 24;
 
@@ -234,7 +234,7 @@ impl Indexer<Cube> for DEdgeIndexer {
     fn from_index(index: usize) -> Cube {
         let index = (index + 11856) % 11880; // Shift back to original indexing
 
-        let mut cube = Cube::solved();
+        let mut cube = Cube::new_solved();
         let combination_index = index / 24;
         let permutation_index = index % 24;
 

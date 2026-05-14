@@ -15,7 +15,7 @@ impl Rng {
     }
 
     #[inline]
-    fn next_u64(&mut self) -> u64 {
+    fn next(&mut self) -> u64 {
         let mut x = self.state;
         x ^= x << 13;
         x ^= x >> 7;
@@ -26,12 +26,12 @@ impl Rng {
 
     #[inline]
     pub fn u32(&mut self) -> u32 {
-        self.next_u64() as u32
+        self.next() as u32
     }
 
     #[inline]
     pub fn f32(&mut self) -> f32 {
-        // uniform in [0, 1)
+        // Sample uniform in [0, 1)
         const SCALE: f32 = 1.0 / (u32::MAX as f32 + 1.0);
         (self.u32() as f32) * SCALE
     }
@@ -41,4 +41,21 @@ impl Default for Rng {
     fn default() -> Self {
         Self::new()
     }
+}
+
+pub fn random_permutation<const N: usize>(rng: &mut Rng) -> [usize; N] {
+    let mut arr = [0; N];
+    for i in 0..N {
+        arr[i] = i;
+    }
+
+    // Fisher-Yates shuffle results in uniform sampling
+    for i in (1..N).rev() {
+        // Uniformly sample number in [0, i]
+        let j = (rng.u32() as usize) % (i + 1);
+        // Technically the above j is not sampled truly uniformly, 
+        // but since i << u32::MAX the bias is negligible.
+        arr.swap(i, j);
+    }
+    arr
 }

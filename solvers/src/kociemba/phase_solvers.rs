@@ -373,7 +373,7 @@ mod tests {
 
     #[test]
     fn phase1_solved_cube() {
-        let cube = Cube::solved();
+        let cube = Cube::new_solved();
         let state = Phase1State::from_cube(&cube, &TABLES);
         let solution = solve_phase(state, &TABLES, 20, &MOVES_PHASE1);
         assert_eq!(solution.len(), 0, "Solved cube needs 0 moves");
@@ -381,7 +381,7 @@ mod tests {
 
     #[test]
     fn phase1_simple_scramble() {
-        let mut cube = Cube::solved();
+        let mut cube = Cube::new_solved();
         cube.turn(F);
 
         let state = Phase1State::from_cube(&cube, &TABLES);
@@ -396,7 +396,7 @@ mod tests {
     #[test]
     fn phase1_short_scramble() {
         let scramble = vec![R, U, Rp, Up];
-        let mut cube = Cube::solved();
+        let mut cube = Cube::new_solved();
         cube.apply_moves(&scramble);
 
         let state = Phase1State::from_cube(&cube, &TABLES);
@@ -414,7 +414,7 @@ mod tests {
 
     #[test]
     fn phase2_solved_cube() {
-        let cube = Cube::solved();
+        let cube = Cube::new_solved();
         let state = Phase2State::from_cube(&cube, &TABLES);
         let solution = solve_phase(state, &TABLES, 18, &MOVES_PHASE2);
         assert_eq!(solution.len(), 0, "Solved cube needs 0 moves");
@@ -422,7 +422,7 @@ mod tests {
 
     #[test]
     fn phase2_simple_scramble() {
-        let mut cube = Cube::solved();
+        let mut cube = Cube::new_solved();
         cube.turn(R2).turn(U2).turn(D).turn(R2); // This is a valid Phase 1 solution, so Phase 2 should solve it
 
         let state = Phase2State::from_cube(&cube, &TABLES);

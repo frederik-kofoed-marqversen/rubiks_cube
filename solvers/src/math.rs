@@ -69,6 +69,34 @@ pub fn compute_permutation<T: PartialEq + Copy, const N: usize>(
     result
 }
 
+pub fn permutation_parity<const N: usize>(permutation: &[usize; N]) -> usize {
+    let mut visited = [false; N];
+    let mut parity = 0;
+
+    for mut i in 0..N {
+        if visited[i] {
+            continue;
+        }
+
+        while !visited[i] {
+            visited[i] = true;
+            i = permutation[i];
+            parity ^= 1;
+        }
+        parity ^= 1;
+    }
+
+    parity
+}
+
+pub fn permutation_inverse<const N: usize>(permutation: &[usize; N]) -> [usize; N] {
+    let mut inverse = [0; N];
+    for i in 0..N {
+        inverse[permutation[i]] = i;
+    }
+    inverse
+}
+
 /// Encodes a permutation of N distinct elements into its lexicographic rank.
 /// The rank is computed using the factorial number system, where each position's
 /// contribution is determined by how many smaller available elements are to the right of it.

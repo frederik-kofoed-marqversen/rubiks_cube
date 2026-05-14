@@ -115,7 +115,7 @@ impl BDBFSSolver {
 
     // Bi-directional BFS solver for a single stage
     fn solve_stage<T: Stage>(cube: &mut Cube) -> Vec<Move> {
-        let solved = Cube::solved();
+        let solved = Cube::new_solved();
         let start_id = T::id(cube);
         let goal_id = T::id(&solved);
 
@@ -180,7 +180,7 @@ impl BFSSolver {
 
     // Bi-directional BFS solver for a single stage
     fn solve_stage<T: Stage>(cube: &mut Cube) -> Vec<Move> {
-        let solved = Cube::solved();
+        let solved = Cube::new_solved();
         let start_id = T::id(cube);
         let goal_id = T::id(&solved);
 
