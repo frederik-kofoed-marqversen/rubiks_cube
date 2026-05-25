@@ -99,10 +99,12 @@ pub fn permutation_inverse<const N: usize>(permutation: &[usize; N]) -> [usize; 
 
 /// Composes two permutations p1 and p2, returning the resulting permutation that applies p1 first and then p2.
 /// In group theory notation: compose_permutations(p2, p1) = (p2 ∘ p1)(i) = p2(p1(i))
-pub fn compose_permutations<const N: usize>(p2: &[usize; N], p1: &[usize; N]) -> [usize; N] {
+pub const fn compose_permutations<const N: usize>(p2: &[usize; N], p1: &[usize; N]) -> [usize; N] {
     let mut result = [0; N];
-    for i in 0..N {
+    let mut i = 0;
+    while i < N {
         result[i] = p2[p1[i]];
+        i += 1;
     }
     result
 }

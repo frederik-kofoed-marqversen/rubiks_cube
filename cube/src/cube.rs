@@ -1,5 +1,5 @@
 use crate::rng::{Rng, random_permutation};
-use crate::math::{permutation_parity, compose_permutations};
+use crate::math::permutation_parity;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Edge {
@@ -103,10 +103,10 @@ pub struct Cube {
     // Position-indexed arrays:
     // edge_perm[pos] = ID (0-11) of the piece currently at position pos
     // edge_orient[pos] = orientation of the piece currently at position pos
-    edge_perm: [usize; 12],
-    edge_orient: [u32; 12],
-    corner_perm: [usize; 8],
-    corner_orient: [u32; 8],
+    pub(crate) edge_perm: [usize; 12],
+    pub(crate) edge_orient: [u32; 12],
+    pub(crate) corner_perm: [usize; 8],
+    pub(crate) corner_orient: [u32; 8],
 }
 
 #[inline]
@@ -120,22 +120,6 @@ fn rotate_corner(orientation: u32, amount: u32) -> u32 {
 }
 
 impl Cube {
-    /// This is pub(crate) to allow symmetries module to construct cubes
-    /// without externally exposing internal representation.
-    pub(crate) const fn from_arrays(
-        edge_perm: [usize; 12],
-        edge_orient: [u32; 12],
-        corner_perm: [usize; 8],
-        corner_orient: [u32; 8],
-    ) -> Self {
-        Cube {
-            edge_perm,
-            edge_orient,
-            corner_perm,
-            corner_orient,
-        }
-    }
-    
     /// Samples a uniformly random cube state
     pub fn new_random(rng: &mut Rng) -> Self {
         let mut edge_permutation: [usize; 12] = random_permutation(rng);
@@ -176,30 +160,6 @@ impl Cube {
     #[inline]
     pub fn is_solved(&self) -> bool {
         return *self == Cube::new_solved();
-    }
-
-    /// Multiply (compose) two cubes
-    /// Using standard composition notation: multiply(cube2, cube1) = (cube2 ∘ cube1)(x) = cube2(cube1(x))
-    pub fn multiply(cube2: &Cube, cube1: &Cube) -> Cube {
-        let edge_perm = compose_permutations(&cube2.edge_perm, &cube1.edge_perm);
-        let corner_perm = compose_permutations(&cube2.corner_perm, &cube1.corner_perm);
-
-        let mut edge_orient = [0u32; 12];
-        for i in 0..12 {
-            edge_orient[i] = (cube1.edge_orient[i] + cube2.edge_orient[cube1.edge_perm[i]]) % 2;
-        }
-        
-        let mut corner_orient = [0u32; 8];
-        for i in 0..8 {
-            corner_orient[i] = (cube1.corner_orient[i] + cube2.corner_orient[cube1.corner_perm[i]]) % 3;
-        }
-        
-        Cube {
-            edge_perm,
-            edge_orient,
-            corner_perm,
-            corner_orient,
-        }
     }
 
     pub fn is_valid(&self) -> bool {
