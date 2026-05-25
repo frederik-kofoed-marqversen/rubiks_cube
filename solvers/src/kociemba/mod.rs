@@ -1,4 +1,4 @@
-use super::cube;
+use cube;
 use super::solver::Solver;
 
 mod solver;

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::cube::{Cube, Move, Moveable};
+use cube::{Cube, Move, Moveable};
 use super::kociemba_tables::KociembaTables;
 use super::phase_solvers::{PhaseState, Phase1State, Phase2State, solve_phase, MOVES_PHASE1, MOVES_PHASE2};
 use super::Solver;

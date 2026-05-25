@@ -1,5 +1,5 @@
-use super::cube::{Corner, Cube, Edge, CORNERS, EDGES};
-use crate::math::*;
+use cube::{Corner, Cube, Edge, CORNERS, EDGES};
+use cube::math::*;
 
 pub trait Indexer<T> {
     const SIZE: usize;
@@ -317,15 +317,15 @@ mod tests {
                 #[test]
                 fn solved_index() {
                     assert_eq!(
-                        <$indexer>::to_index(&Cube::new_solved()),
-                        <$indexer>::SOLVED_INDEX
+                        <$indexer as Indexer<Cube>>::to_index(&Cube::new_solved()),
+                        <$indexer as Indexer<Cube>>::SOLVED_INDEX
                     );
                 }
 
                 #[test]
                 fn consistency() {
-                    for i in 0..<$indexer>::SIZE {
-                        let test = <$indexer>::to_index(&<$indexer>::from_index(i));
+                    for i in 0..<$indexer as Indexer<Cube>>::SIZE {
+                        let test = <$indexer as Indexer<Cube>>::to_index(&<$indexer as Indexer<Cube>>::from_index(i));
                         assert_eq!(i, test, "Failed for index {}", i);
                     }
                 }
@@ -333,10 +333,10 @@ mod tests {
         };
     }
 
-    // test_indexer!(eo, EdgeOrientationIndexer);
-    // test_indexer!(co, CornerOrientationIndexer);
-    // test_indexer!(cp, CornerPermutationIndexer);
-    // test_indexer!(es, ESliceIndexer);
-    // test_indexer!(ue, UEdgeIndexer);
-    // test_indexer!(de, DEdgeIndexer);
+    test_indexer!(eo, EdgeOrientationIndexer);
+    test_indexer!(co, CornerOrientationIndexer);
+    test_indexer!(cp, CornerPermutationIndexer);
+    test_indexer!(es, ESliceIndexer);
+    test_indexer!(ue, UEdgeIndexer);
+    test_indexer!(de, DEdgeIndexer);
 }

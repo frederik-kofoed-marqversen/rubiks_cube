@@ -1,7 +1,7 @@
 use super::lookup_table::LookupTable;
 use super::stages::{G3Pochmann, Stage, G1, G2, G4};
 use super::ThistlethwaiteTables;
-use super::cube::{Cube, Move, Moveable};
+use cube::{Cube, Move, Moveable};
 use super::Solver;
 use std::collections::{HashMap, VecDeque};
 

@@ -1,4 +1,4 @@
-use crate::cube::{Cube, Move};
+use cube::{Cube, Move};
 
 pub trait Solver {
     fn solve(&self, cube: Cube) -> Vec<Move>;

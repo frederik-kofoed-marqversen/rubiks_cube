@@ -1,7 +1,7 @@
-use super::cube::{Cube, Move, Moveable, MOVES};
+use cube::{Cube, Move, Moveable, MOVES};
+use cube::math::update_distance_mod3;
 use super::indexers::*;
 use crate::kociemba::phase_solvers::{MOVES_PHASE1, MOVES_PHASE2};
-use crate::math::update_distance_mod3;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -195,17 +195,17 @@ impl KociembaTables {
         // Pruning tables
         println!("Building pruning tables...");
         println!("EO Pruning Table...");
-        let eo_prune = PruningTable::build::<(usize, &IndexMoveTable), EdgeOrientationIndexer>((0, &eo_move), &MOVES_PHASE1);
+        let eo_prune = PruningTable::build::<IndexedState, EdgeOrientationIndexer>(IndexedState::new(0, &eo_move), &MOVES_PHASE1);
         println!("CO Pruning Table...");
-        let co_prune = PruningTable::build::<(usize, &IndexMoveTable), CornerOrientationIndexer>((0, &co_move), &MOVES_PHASE1);
+        let co_prune = PruningTable::build::<IndexedState, CornerOrientationIndexer>(IndexedState::new(0, &co_move), &MOVES_PHASE1);
         println!("ES Pruning Table...");
-        let es_prune = PruningTable::build::<(usize, &IndexMoveTable), ESliceIndexer>((0, &es_move), &MOVES_PHASE1);
+        let es_prune = PruningTable::build::<IndexedState, ESliceIndexer>(IndexedState::new(0, &es_move), &MOVES_PHASE1);
         println!("CP Pruning Table...");
-        let cp_prune = PruningTable::build::<(usize, &IndexMoveTable), CornerPermutationIndexer>((0, &cp_move), &MOVES_PHASE2);
+        let cp_prune = PruningTable::build::<IndexedState, CornerPermutationIndexer>(IndexedState::new(0, &cp_move), &MOVES_PHASE2);
         println!("UE Pruning Table...");
-        let ue_prune = PruningTable::build::<(usize, &IndexMoveTable), UEdgeIndexer>((0, &ue_move), &MOVES_PHASE2);
+        let ue_prune = PruningTable::build::<IndexedState, UEdgeIndexer>(IndexedState::new(0, &ue_move), &MOVES_PHASE2);
         println!("DE Pruning Table...");
-        let de_prune = PruningTable::build::<(usize, &IndexMoveTable), DEdgeIndexer>((0, &de_move), &MOVES_PHASE2);
+        let de_prune = PruningTable::build::<IndexedState, DEdgeIndexer>(IndexedState::new(0, &de_move), &MOVES_PHASE2);
 
         Self {
             eo_move,
@@ -230,23 +230,35 @@ impl KociembaTables {
 
 
 
+// Helper type for implementing Moveable on indexed states
+#[derive(Clone, Copy)]
+pub struct IndexedState<'a> {
+    idx: usize,
+    table: &'a IndexMoveTable,
+}
+
+impl<'a> IndexedState<'a> {
+    pub fn new(idx: usize, table: &'a IndexMoveTable) -> Self {
+        Self { idx, table }
+    }
+}
+
 // Impls for simple implementation and testing
-impl Moveable for (usize, &IndexMoveTable) {
+impl Moveable for IndexedState<'_> {
     fn turn(&mut self, mv: Move) -> &mut Self {
-        let (idx, table) = self;
-        *idx = table.get(*idx, mv);
+        self.idx = self.table.get(self.idx, mv);
         self
     }
 }
 
-impl<T: Indexer<Cube>> Indexer<(usize, &IndexMoveTable)> for T {
+impl<T: Indexer<Cube>> Indexer<IndexedState<'_>> for T {
     const SIZE: usize = T::SIZE;
 
-    fn to_index(state: &(usize, &IndexMoveTable)) -> usize {
-        state.0
+    fn to_index(state: &IndexedState) -> usize {
+        state.idx
     }
 
-    fn from_index(_idx: usize) -> (usize, &'static IndexMoveTable) {
+    fn from_index(_idx: usize) -> IndexedState<'static> {
         unimplemented!("This is a helper struct for move tables and should not be used directly")
     }
 }

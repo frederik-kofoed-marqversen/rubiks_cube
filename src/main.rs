@@ -1,10 +1,11 @@
+extern crate cube;
 extern crate solvers;
+
+use cube::{Cube, Rng, Moveable};
 use solvers::Solver;
-use solvers::rng::Rng;
 // use solvers::thistlethwaite::{LookupTableSolver, ThistlethwaiteTables, BFSSolver, BDBFSSolver};
 use solvers::kociemba::{KociembaSolver, KociembaTables};
-use solvers::cube::{Cube, Moveable};
-// use solvers::cube::Move::*;
+// use cube::Move::*;
 
 fn main() {
     let mut rng = Rng::new();

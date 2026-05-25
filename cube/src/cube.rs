@@ -1,5 +1,5 @@
 use crate::rng::{Rng, random_permutation};
-use crate::math::permutation_parity;
+use crate::math::{permutation_parity, compose_permutations};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Edge {
@@ -190,9 +190,59 @@ impl Cube {
         }
     }
 
+    /// Create a cube from raw permutation and orientation arrays.
+    /// This is pub(crate) to allow the symmetries module to construct cubes
+    /// while keeping the internal representation hidden from external users.
+    pub(crate) const fn from_arrays(
+        edge_perm: [usize; 12],
+        edge_orient: [u32; 12],
+        corner_perm: [usize; 8],
+        corner_orient: [u32; 8],
+    ) -> Self {
+        Cube {
+            edge_perm,
+            edge_orient,
+            corner_perm,
+            corner_orient,
+        }
+    }
+
     #[inline]
     pub fn is_solved(&self) -> bool {
         return *self == Cube::new_solved();
+    }
+
+    /// Multiply (compose) two cubes: self ∘ other
+    /// 
+    /// This applies the transformation represented by `other` first, then `self`.
+    /// In group theory notation: (self ∘ other)(x) = self(other(x))
+    /// 
+    /// Example: If `other` scrambles the cube and `self` is a symmetry,
+    /// the result is the scrambled cube after applying the symmetry.
+    pub fn multiply(&self, other: &Cube) -> Cube {
+        // Compose permutations
+        let edge_perm = compose_permutations(&self.edge_perm, &other.edge_perm);
+        let corner_perm = compose_permutations(&self.corner_perm, &other.corner_perm);
+        
+        // Compose edge orientations: add mod 2
+        // When composing, orientations add: result[i] = (self.orient[i] + other.orient[perm[i]]) % 2
+        let mut edge_orient = [0u32; 12];
+        for i in 0..12 {
+            edge_orient[i] = (self.edge_orient[i] + other.edge_orient[other.edge_perm[i]]) % 2;
+        }
+        
+        // Compose corner orientations: add mod 3
+        let mut corner_orient = [0u32; 8];
+        for i in 0..8 {
+            corner_orient[i] = (self.corner_orient[i] + other.corner_orient[other.corner_perm[i]]) % 3;
+        }
+        
+        Cube {
+            edge_perm,
+            edge_orient,
+            corner_perm,
+            corner_orient,
+        }
     }
 
     pub fn is_valid(&self) -> bool {

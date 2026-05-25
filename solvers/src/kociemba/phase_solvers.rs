@@ -1,6 +1,6 @@
-use super::cube::{Cube, Move, MOVES};
+use cube::{Cube, Move, MOVES};
 use super::indexers::*;
-use super::kociemba_tables::{compute_min_distance, IndexMoveTable};
+use super::kociemba_tables::{compute_min_distance, IndexedState};
 use super::KociembaTables;
 
 pub const MOVES_PHASE1: [Move; 18] = MOVES;
@@ -46,18 +46,18 @@ impl Phase1State {
         
         // Use compute_min_distance to get actual distances, not just mod-3 lower bounds
         // This is needed because get() requires actual distances for incremental updates
-        let eo_dist = compute_min_distance::<(usize, &IndexMoveTable), EdgeOrientationIndexer>(
-            (eo, &tables.eo_move),
+        let eo_dist = compute_min_distance::<IndexedState, EdgeOrientationIndexer>(
+            IndexedState::new(eo, &tables.eo_move),
             &tables.eo_prune,
             &MOVES_PHASE1,
         );
-        let co_dist = compute_min_distance::<(usize, &IndexMoveTable), CornerOrientationIndexer>(
-            (co, &tables.co_move),
+        let co_dist = compute_min_distance::<IndexedState, CornerOrientationIndexer>(
+            IndexedState::new(co, &tables.co_move),
             &tables.co_prune,
             &MOVES_PHASE1,
         );
-        let es_dist = compute_min_distance::<(usize, &IndexMoveTable), ESliceIndexer>(
-            (es, &tables.es_move),
+        let es_dist = compute_min_distance::<IndexedState, ESliceIndexer>(
+            IndexedState::new(es, &tables.es_move),
             &tables.es_prune,
             &MOVES_PHASE1,
         );
@@ -121,23 +121,23 @@ impl Phase2State {
         let ue = UEdgeIndexer::to_index(cube);
         let de = DEdgeIndexer::to_index(cube);
 
-        let cp_dist = compute_min_distance::<(usize, &IndexMoveTable), CornerPermutationIndexer>(
-            (cp, &tables.cp_move),
+        let cp_dist = compute_min_distance::<IndexedState, CornerPermutationIndexer>(
+            IndexedState::new(cp, &tables.cp_move),
             &tables.cp_prune,
             &MOVES_PHASE2,
         );
-        let es_dist = compute_min_distance::<(usize, &IndexMoveTable), ESliceIndexer>(
-            (es, &tables.es_move),
+        let es_dist = compute_min_distance::<IndexedState, ESliceIndexer>(
+            IndexedState::new(es, &tables.es_move),
             &tables.es_prune,
             &MOVES_PHASE2,
         );
-        let ue_dist = compute_min_distance::<(usize, &IndexMoveTable), UEdgeIndexer>(
-            (ue, &tables.ue_move),
+        let ue_dist = compute_min_distance::<IndexedState, UEdgeIndexer>(
+            IndexedState::new(ue, &tables.ue_move),
             &tables.ue_prune,
             &MOVES_PHASE2,
         );
-        let de_dist = compute_min_distance::<(usize, &IndexMoveTable), DEdgeIndexer>(
-            (de, &tables.de_move),
+        let de_dist = compute_min_distance::<IndexedState, DEdgeIndexer>(
+            IndexedState::new(de, &tables.de_move),
             &tables.de_prune,
             &MOVES_PHASE2,
         );

@@ -32,7 +32,7 @@
 //! - **Stage G3**: Separate edge slices & fix corner structure → highly constrained subgroup
 //! - **Stage G4**: Solve completely → identity (solved cube)
 
-use super::cube::{Cube, Move, Edge, Corner, EDGES, CORNERS};
+use cube::{Cube, Move, Edge, Corner, EDGES, CORNERS};
 
 pub trait Stage {
     /// Move pool for this stage: moves that preserve the previous subgroup.

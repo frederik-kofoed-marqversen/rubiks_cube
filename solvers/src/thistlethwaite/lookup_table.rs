@@ -1,5 +1,5 @@
 use super::stages::Stage;
-use super::cube::{Cube, Moveable};
+use cube::{Cube, Moveable};
 use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::collections::VecDeque;
