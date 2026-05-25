@@ -203,6 +203,7 @@ impl Cube {
         }
     }
 
+    #[inline]
     pub fn is_solved(&self) -> bool {
         return *self == Cube::new_solved();
     }
@@ -220,22 +221,27 @@ impl Cube {
         true
     }
 
+    #[inline]
     pub fn corner_permutation_parity(&self) -> usize {
         permutation_parity(&self.corner_pos.map(|c| c as usize))
     }
 
+    #[inline]
     pub fn edge_permutation_parity(&self) -> usize {
         permutation_parity(&self.edge_pos.map(|e| e as usize))
     }
 
+    #[inline]
     pub fn corner_orientation_parity(&self) -> u32 {
         self.corners.iter().map(|c| c.orientation).sum::<u32>() % 3
     }
 
+    #[inline]
     pub fn edge_orientation_parity(&self) -> u32 {
         self.edges.iter().map(|e| e.orientation).sum::<u32>() % 2
     }
 
+    // Getters and setters
     #[inline]
     pub fn get_edge_orientation(&self, pos: Edge) -> u32 {
         self.edges[pos as usize].orientation
@@ -288,6 +294,7 @@ impl Cube {
         self.corner_pos[corner_type as usize] = pos;
     }
 
+    // Internal functions for applying moves
     #[inline]
     fn swap_edges(&mut self, pos1: Edge, pos2: Edge) {
         self.edges.swap(pos1 as usize, pos2 as usize);

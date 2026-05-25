@@ -1,6 +1,6 @@
 const BINOM: [[usize; 5]; 13] = precompute_binomials();
 const FACTORIAL: [usize; 13] = precompute_factorials();
-const MOD3_DISTANCE_MAP: [[u32; 3]; 20] = precompute_mod3_distance_map();
+const MOD3_DISTANCE_MAP: [[u32; 3]; 21] = precompute_mod3_distance_map();
 
 // Precompute binomial coefficients using Pascal's triangle.
 const fn precompute_binomials<const N: usize, const K: usize>() -> [[usize; K]; N] {

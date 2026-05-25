@@ -54,12 +54,6 @@ impl PruningTable {
         update_distance_mod3(prev_distance, mod3)
     }
 
-    /// Get initial distance lower bound (just the mod-3 value)
-    #[inline]
-    pub fn get_initial(&self, index: usize) -> u32 {
-        self.get_mod3(index)
-    }
-
     #[inline]
     fn get_mod3(&self, index: usize) -> u32 {
         let u32_index = index >> 4;
@@ -88,17 +82,17 @@ impl PruningTable {
         table.set_mod3(table.solved_index, 0); // Distance to solved state is 0
         queue.push_back(solved);
 
-        while let Some(state) = queue.pop_front() {
+        while let Some(mut state) = queue.pop_front() {
             let distance = table.get_mod3(I::to_index(&state));
             for &mv in moves {
-                let mut next = state;
-                next.turn(mv);
-                let next_index = I::to_index(&next);
-                if table.get_mod3(next_index) == 3 {
+                state.turn(mv);
+                let index = I::to_index(&state);
+                if table.get_mod3(index) == 3 {
                     // Not visited yet, set distance and push to queue
-                    table.set_mod3(next_index, distance + 1);
-                    queue.push_back(next);
+                    table.set_mod3(index, distance + 1);
+                    queue.push_back(state);
                 }
+                state.turn(mv.inverse()); // Undo the move for next iteration
             }
         }
 
@@ -107,29 +101,25 @@ impl PruningTable {
 }
 
 pub fn compute_min_distance<T: Moveable + Copy, I: Indexer<T>>(
-    state: T,
+    mut state: T,
     prune_table: &PruningTable,
     moves: &[Move],
 ) -> u32 {
     let mut distance = 0;
-    let mut current = state;
-    let mut current_index = I::to_index(&current);
-    let mut current_mod3 = prune_table.get_mod3(current_index);
-    while current_index != prune_table.solved_index {
-        if current_mod3 == 0 {
-            current_mod3 = 3;
-        }
+    let mut index = I::to_index(&state);
+    let mut reference_dist = 3 + prune_table.get_mod3(index);
+    while index != prune_table.solved_index {
         for &mv in moves {
-            let mut next = current;
-            next.turn(mv);
-            let next_index = I::to_index(&next);
-            if prune_table.get(next_index, current_mod3) < current_mod3 {
-                current = next;
-                current_index = next_index;
-                current_mod3 = prune_table.get_mod3(current_index);
+            state.turn(mv);
+            let next_index = I::to_index(&state);
+            let next_mod3 = prune_table.get_mod3(next_index);
+            if update_distance_mod3(reference_dist, next_mod3) < reference_dist {
+                index = next_index;
+                reference_dist = 3 + next_mod3;
                 distance += 1;
                 break;
             }
+            state.turn(mv.inverse());
         }
     }
     distance
