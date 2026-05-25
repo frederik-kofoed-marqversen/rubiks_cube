@@ -97,6 +97,16 @@ pub fn permutation_inverse<const N: usize>(permutation: &[usize; N]) -> [usize; 
     inverse
 }
 
+/// Composes two permutations p1 and p2, returning the resulting permutation that applies p2 first and then p1.
+/// In group theory notation: compose_permutations(p1, p2) = (p1 ∘ p2)(i) = p1(p2(i))
+pub fn compose_permutations<const N: usize>(p1: &[usize; N], p2: &[usize; N]) -> [usize; N] {
+    let mut result = [0; N];
+    for i in 0..N {
+        result[i] = p1[p2[i]];
+    }
+    result
+}
+
 /// Encodes a permutation of N distinct elements into its lexicographic rank.
 /// The rank is computed using the factorial number system, where each position's
 /// contribution is determined by how many smaller available elements are to the right of it.

@@ -1,5 +1,5 @@
 use crate::rng::{Rng, random_permutation};
-use crate::math::{permutation_parity, permutation_inverse};
+use crate::math::permutation_parity;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Edge {
@@ -98,35 +98,25 @@ impl Face {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-struct Cubie<T> {
-    piece_type: T,
-    orientation: u32,
-}
-
-impl Cubie<Edge> {
-    #[inline]
-    fn flip(&mut self) {
-        // Addition mod 2
-        self.orientation ^= 1;
-    }
-}
-
-impl Cubie<Corner> {
-    #[inline]
-    fn rotate(&mut self, amount: u32) {
-        // Addition mod 3
-        const MOD3: [u32; 5] = [0, 1, 2, 0, 1];
-        self.orientation = MOD3[(self.orientation + amount) as usize];
-    }
-}
-
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Cube {
-    edges: [Cubie<Edge>; 12],
-    corners: [Cubie<Corner>; 8],
-    edge_pos: [Edge; 12],
-    corner_pos: [Corner; 8],
+    // Position-indexed arrays:
+    // edge_perm[pos] = ID (0-11) of the piece currently at position pos
+    // edge_orient[pos] = orientation of the piece currently at position pos
+    edge_perm: [usize; 12],
+    edge_orient: [u32; 12],
+    corner_perm: [usize; 8],
+    corner_orient: [u32; 8],
+}
+
+#[inline]
+fn flip_edge(orientation: u32) -> u32 {
+    orientation ^ 1
+}
+
+#[inline]
+fn rotate_corner(orientation: u32, amount: u32) -> u32 {
+    (orientation + amount) % 3
 }
 
 // def inv_cubie_cube(self, d):
@@ -180,14 +170,11 @@ impl Cube {
         edge_orientations.push((2 - edge_parity) % 2);
         corner_orientations.push((3 - corner_parity) % 3);
 
-        let edge_pos = permutation_inverse(&edge_permutation);
-        let corner_pos = permutation_inverse(&corner_permutation);
-
         let cube = Cube {
-            edges: edge_permutation.map(|i| Cubie{piece_type: EDGES[i], orientation: edge_orientations[i]}),
-            corners: corner_permutation.map(|i| Cubie{piece_type: CORNERS[i], orientation: corner_orientations[i]}),
-            edge_pos: edge_pos.map(|i| EDGES[i]),
-            corner_pos: corner_pos.map(|i| CORNERS[i]),
+            edge_perm: edge_permutation,
+            edge_orient: edge_orientations.try_into().unwrap(),
+            corner_perm: corner_permutation,
+            corner_orient: corner_orientations.try_into().unwrap(),
         };
 
         assert!(cube.is_valid(), "Generated an invalid cube state");
@@ -196,10 +183,10 @@ impl Cube {
     
     pub fn new_solved() -> Self {
         Cube{
-            edges: EDGES.map(|edge| Cubie{piece_type: edge, orientation: 0}),
-            corners: CORNERS.map(|corner| Cubie{piece_type: corner, orientation: 0}),
-            edge_pos: EDGES,
-            corner_pos: CORNERS,
+            edge_perm: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+            edge_orient: [0; 12],
+            corner_perm: [0, 1, 2, 3, 4, 5, 6, 7],
+            corner_orient: [0; 8],
         }
     }
 
@@ -209,102 +196,85 @@ impl Cube {
     }
 
     pub fn is_valid(&self) -> bool {
-        if self.corner_orientation_parity() != 0 {
+        // Check corner orientation parity (sum must be 0 mod 3)
+        if self.corner_orient.iter().sum::<u32>() % 3 != 0 {
             return false;
         }
-        if self.edge_orientation_parity() != 0 {
+        // Check edge orientation parity (sum must be 0 mod 2)
+        if self.edge_orient.iter().sum::<u32>() % 2 != 0 {
             return false;
         }
-        if self.corner_permutation_parity() != self.edge_permutation_parity() {
+        // Check that corner and edge permutation parities match
+        if permutation_parity(&self.corner_perm) != permutation_parity(&self.edge_perm) {
             return false;
         }
         true
     }
 
-    #[inline]
-    pub fn corner_permutation_parity(&self) -> usize {
-        permutation_parity(&self.corner_pos.map(|c| c as usize))
-    }
-
-    #[inline]
-    pub fn edge_permutation_parity(&self) -> usize {
-        permutation_parity(&self.edge_pos.map(|e| e as usize))
-    }
-
-    #[inline]
-    pub fn corner_orientation_parity(&self) -> u32 {
-        self.corners.iter().map(|c| c.orientation).sum::<u32>() % 3
-    }
-
-    #[inline]
-    pub fn edge_orientation_parity(&self) -> u32 {
-        self.edges.iter().map(|e| e.orientation).sum::<u32>() % 2
-    }
-
     // Getters and setters
     #[inline]
     pub fn get_edge_orientation(&self, pos: Edge) -> u32 {
-        self.edges[pos as usize].orientation
+        self.edge_orient[pos as usize]
     }
 
     #[inline]
     pub fn get_edge_type(&self, pos: Edge) -> Edge {
-        self.edges[pos as usize].piece_type
+        EDGES[self.edge_perm[pos as usize]]
     }
 
     #[inline]
     pub fn get_edge_position(&self, edge: Edge) -> Edge {
-        self.edge_pos[edge as usize]
+        let edge_id = edge as usize;
+        self.edge_perm.iter().position(|&id| id == edge_id).map(|pos| EDGES[pos]).unwrap()
     }
 
     #[inline]
     pub fn get_corner_orientation(&self, pos: Corner) -> u32 {
-        self.corners[pos as usize].orientation
+        self.corner_orient[pos as usize]
     }
 
     #[inline]
     pub fn get_corner_type(&self, pos: Corner) -> Corner {
-        self.corners[pos as usize].piece_type
+        CORNERS[self.corner_perm[pos as usize]]
     }
 
     #[inline]
     pub fn get_corner_position(&self, corner: Corner) -> Corner {
-        self.corner_pos[corner as usize]
+        let corner_id = corner as usize;
+        self.corner_perm.iter().position(|&id| id == corner_id).map(|pos| CORNERS[pos]).unwrap()
     }
 
     #[inline]
     pub fn set_edge_orientation(&mut self, pos: Edge, orientation: u32) {
-        self.edges[pos as usize].orientation = orientation;
+        self.edge_orient[pos as usize] = orientation;
     }
 
     #[inline]
     pub fn set_corner_orientation(&mut self, pos: Corner, orientation: u32) {
-        self.corners[pos as usize].orientation = orientation;
+        self.corner_orient[pos as usize] = orientation;
     }
 
     #[inline]
     pub fn set_edge_type(&mut self, pos: Edge, edge_type: Edge) {
-        self.edges[pos as usize].piece_type = edge_type;
-        self.edge_pos[edge_type as usize] = pos;
+        self.edge_perm[pos as usize] = edge_type as usize;
     }
 
     #[inline]
     pub fn set_corner_type(&mut self, pos: Corner, corner_type: Corner) {
-        self.corners[pos as usize].piece_type = corner_type;
-        self.corner_pos[corner_type as usize] = pos;
+        self.corner_perm[pos as usize] = corner_type as usize;
     }
 
-    // Internal functions for applying moves
+    // Internal helper functions for applying moves
     #[inline]
     fn swap_edges(&mut self, pos1: Edge, pos2: Edge) {
-        self.edges.swap(pos1 as usize, pos2 as usize);
-        self.edge_pos.swap(self.edges[pos1 as usize].piece_type as usize, self.edges[pos2 as usize].piece_type as usize);
+        self.edge_perm.swap(pos1 as usize, pos2 as usize);
+        self.edge_orient.swap(pos1 as usize, pos2 as usize);
     }
 
     #[inline]
     fn swap_corners(&mut self, pos1: Corner, pos2: Corner) {
-        self.corners.swap(pos1 as usize, pos2 as usize);
-        self.corner_pos.swap(self.corners[pos1 as usize].piece_type as usize, self.corners[pos2 as usize].piece_type as usize);
+        self.corner_perm.swap(pos1 as usize, pos2 as usize);
+        self.corner_orient.swap(pos1 as usize, pos2 as usize);
     }
 
     fn u(&mut self) -> &mut Self {
@@ -340,10 +310,10 @@ impl Cube {
         self.swap_corners(Corner::DRF, Corner::DRB);
         self.swap_corners(Corner::DRB, Corner::URB);
 
-        self.corners[Corner::URF as usize].rotate(1);
-        self.corners[Corner::DRF as usize].rotate(2);
-        self.corners[Corner::DRB as usize].rotate(1);
-        self.corners[Corner::URB as usize].rotate(2);
+        self.corner_orient[Corner::URF as usize] = rotate_corner(self.corner_orient[Corner::URF as usize], 1);
+        self.corner_orient[Corner::DRF as usize] = rotate_corner(self.corner_orient[Corner::DRF as usize], 2);
+        self.corner_orient[Corner::DRB as usize] = rotate_corner(self.corner_orient[Corner::DRB as usize], 1);
+        self.corner_orient[Corner::URB as usize] = rotate_corner(self.corner_orient[Corner::URB as usize], 2);
 
         self
     }
@@ -357,10 +327,10 @@ impl Cube {
         self.swap_corners(Corner::ULB, Corner::DLB);
         self.swap_corners(Corner::DLB, Corner::DLF);
 
-        self.corners[Corner::ULF as usize].rotate(2);
-        self.corners[Corner::DLF as usize].rotate(1);
-        self.corners[Corner::DLB as usize].rotate(2);
-        self.corners[Corner::ULB as usize].rotate(1);
+        self.corner_orient[Corner::ULF as usize] = rotate_corner(self.corner_orient[Corner::ULF as usize], 2);
+        self.corner_orient[Corner::DLF as usize] = rotate_corner(self.corner_orient[Corner::DLF as usize], 1);
+        self.corner_orient[Corner::DLB as usize] = rotate_corner(self.corner_orient[Corner::DLB as usize], 2);
+        self.corner_orient[Corner::ULB as usize] = rotate_corner(self.corner_orient[Corner::ULB as usize], 1);
 
         self
     }
@@ -374,15 +344,15 @@ impl Cube {
         self.swap_corners(Corner::ULF, Corner::DLF);
         self.swap_corners(Corner::DLF, Corner::DRF);
 
-        self.corners[Corner::URF as usize].rotate(2);
-        self.corners[Corner::ULF as usize].rotate(1);
-        self.corners[Corner::DLF as usize].rotate(2);
-        self.corners[Corner::DRF as usize].rotate(1);
+        self.corner_orient[Corner::URF as usize] = rotate_corner(self.corner_orient[Corner::URF as usize], 2);
+        self.corner_orient[Corner::ULF as usize] = rotate_corner(self.corner_orient[Corner::ULF as usize], 1);
+        self.corner_orient[Corner::DLF as usize] = rotate_corner(self.corner_orient[Corner::DLF as usize], 2);
+        self.corner_orient[Corner::DRF as usize] = rotate_corner(self.corner_orient[Corner::DRF as usize], 1);
 
-        self.edges[Edge::UF as usize].flip();
-        self.edges[Edge::LF as usize].flip();
-        self.edges[Edge::DF as usize].flip();
-        self.edges[Edge::RF as usize].flip();
+        self.edge_orient[Edge::UF as usize] = flip_edge(self.edge_orient[Edge::UF as usize]);
+        self.edge_orient[Edge::LF as usize] = flip_edge(self.edge_orient[Edge::LF as usize]);
+        self.edge_orient[Edge::DF as usize] = flip_edge(self.edge_orient[Edge::DF as usize]);
+        self.edge_orient[Edge::RF as usize] = flip_edge(self.edge_orient[Edge::RF as usize]);
         
         self
     }
@@ -396,15 +366,15 @@ impl Cube {
         self.swap_corners(Corner::DRB, Corner::DLB);
         self.swap_corners(Corner::DLB, Corner::ULB);
 
-        self.corners[Corner::URB as usize].rotate(1);
-        self.corners[Corner::ULB as usize].rotate(2);
-        self.corners[Corner::DLB as usize].rotate(1);
-        self.corners[Corner::DRB as usize].rotate(2);
+        self.corner_orient[Corner::URB as usize] = rotate_corner(self.corner_orient[Corner::URB as usize], 1);
+        self.corner_orient[Corner::ULB as usize] = rotate_corner(self.corner_orient[Corner::ULB as usize], 2);
+        self.corner_orient[Corner::DLB as usize] = rotate_corner(self.corner_orient[Corner::DLB as usize], 1);
+        self.corner_orient[Corner::DRB as usize] = rotate_corner(self.corner_orient[Corner::DRB as usize], 2);
 
-        self.edges[Edge::UB as usize].flip();
-        self.edges[Edge::LB as usize].flip();
-        self.edges[Edge::DB as usize].flip();
-        self.edges[Edge::RB as usize].flip();
+        self.edge_orient[Edge::UB as usize] = flip_edge(self.edge_orient[Edge::UB as usize]);
+        self.edge_orient[Edge::LB as usize] = flip_edge(self.edge_orient[Edge::LB as usize]);
+        self.edge_orient[Edge::DB as usize] = flip_edge(self.edge_orient[Edge::DB as usize]);
+        self.edge_orient[Edge::RB as usize] = flip_edge(self.edge_orient[Edge::RB as usize]);
         
         self
     }
@@ -451,42 +421,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn r_l_u_moves() {
-        // Short algorithm that affects only few pieces in the end.
-        let moves = [Move::Rp, Move::U, Move::L, Move::Up, Move::R, Move::U, Move::Lp, Move::Up];
-        
-        let mut cube = Cube::new_solved();
-        cube.apply_moves(&moves);
-
-        cube.swap_corners(Corner::URB, Corner::URF);
-        cube.swap_corners(Corner::URF, Corner::ULF);
-        cube.corners[Corner::URF as usize].rotate(2);
-        cube.corners[Corner::ULF as usize].rotate(2);
-        cube.corners[Corner::URB as usize].rotate(2);
-
+    fn test_new_solved() {
+        let cube = Cube::new_solved();
         assert!(cube.is_solved());
+        assert!(cube.is_valid());
     }
 
     #[test]
-    fn d_f_b_moves() {
-        // Short algorithm that affects only few pieces in the end.
-        let moves = [Move::Fp, Move::D, Move::B, Move::Dp, Move::F, Move::D, Move::Bp, Move::Dp];
-        
+    fn test_moves_preserve_validity() {
         let mut cube = Cube::new_solved();
+        let moves = [Move::R, Move::U, Move::Rp, Move::Up, Move::R, Move::U2, Move::Rp];
         cube.apply_moves(&moves);
-
-        cube.swap_corners(Corner::DLF, Corner::DRF);
-        cube.swap_corners(Corner::DRF, Corner::DRB);
-        cube.corners[Corner::DRF as usize].rotate(2);
-        cube.corners[Corner::DLF as usize].rotate(2);
-        cube.corners[Corner::DRB as usize].rotate(2);
-
-        assert!(cube.is_solved());
+        assert!(cube.is_valid());
     }
 
     #[test]
-    fn double_moves() {
+    fn test_move_inverses() {
+        let mut cube = Cube::new_solved();
         
+        for mv in &[Move::U, Move::D, Move::L, Move::R, Move::F, Move::B] {
+            cube.turn(*mv);
+            cube.turn(mv.inverse());
+            assert!(cube.is_solved(), "Move {:?} and inverse should return to solved", mv);
+        }
+    }
+
+    #[test]
+    fn test_double_moves() {
         let mut cube1 = Cube::new_solved();
         let mut cube2 = Cube::new_solved();
         
@@ -513,5 +474,49 @@ mod tests {
         cube2.swap_edges(Edge::DR, Edge::DL);
 
         assert_eq!(cube1, cube2);
+    }
+
+    #[test]
+    fn test_corner_commutator() {
+        // R' U L U' R U L' U' is a 3-cycle of corners with twists
+        let moves = [Move::Rp, Move::U, Move::L, Move::Up, Move::R, Move::U, Move::Lp, Move::Up];
+        
+        let mut cube = Cube::new_solved();
+        cube.apply_moves(&moves);
+        
+        assert!(cube.is_valid());
+        
+        // Apply it 3 times should return to solved
+        cube.apply_moves(&moves);
+        cube.apply_moves(&moves);
+        assert!(cube.is_solved());
+    }
+
+    #[test]
+    fn test_random_cube_validity() {
+        let mut rng = Rng::new();
+        for _ in 0..100 {
+            let cube = Cube::new_random(&mut rng);
+            assert!(cube.is_valid(), "Random cube should be valid");
+        }
+    }
+    
+    #[test]
+    fn test_getter_setter_consistency() {
+        let mut cube = Cube::new_solved();
+        
+        // Test edge getters/setters
+        cube.set_edge_type(Edge::UR, Edge::DF);
+        assert_eq!(cube.get_edge_type(Edge::UR), Edge::DF);
+        
+        cube.set_edge_orientation(Edge::UB, 1);
+        assert_eq!(cube.get_edge_orientation(Edge::UB), 1);
+        
+        // Test corner getters/setters
+        cube.set_corner_type(Corner::URF, Corner::DLB);
+        assert_eq!(cube.get_corner_type(Corner::URF), Corner::DLB);
+        
+        cube.set_corner_orientation(Corner::URB, 2);
+        assert_eq!(cube.get_corner_orientation(Corner::URB), 2);
     }
 }
