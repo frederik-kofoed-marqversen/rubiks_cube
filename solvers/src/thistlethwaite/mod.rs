@@ -1,4 +1,3 @@
-use cube;
 use super::solver::Solver;
 
 mod lookup_table;

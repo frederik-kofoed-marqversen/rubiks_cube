@@ -364,7 +364,7 @@ fn dfs<S: PhaseState>(
 
 #[cfg(test)]
 mod tests {
-    use super::super::cube::{Cube, Moveable};
+    use cube::{Cube, Moveable};
     use super::Move::*;
     use super::*;
     use std::sync::LazyLock;
