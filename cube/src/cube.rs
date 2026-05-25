@@ -119,41 +119,24 @@ fn rotate_corner(orientation: u32, amount: u32) -> u32 {
     (orientation + amount) % 3
 }
 
-// def inv_cubie_cube(self, d):
-//         """Store the inverse of this cubie cube in d."""
-//         for e in Ed:
-//             d.ep[self.ep[e]] = e
-//         for e in Ed:
-//             d.eo[e] = self.eo[d.ep[e]]
-
-//         for c in Co:
-//             d.cp[self.cp[c]] = c
-//         for c in Co:
-//             ori = self.co[d.cp[c]]
-//             if ori >= 3:
-//                 d.co[c] = ori
-//             else:
-//                 d.co[c] = -ori
-//                 if d.co[c] < 0:
-//                     d.co[c] += 3
-
-//     def symmetries(self):
-//         """Generate a list of the symmetries and antisymmetries of the cubie cube."""
-//         from twophase.symmetries import symCube, inv_idx  # not nice here but else we have circular imports
-//         s = []
-//         d = CubieCube()
-//         for j in range(N_SYM):
-//             c = CubieCube(symCube[j].cp, symCube[j].co, symCube[j].ep, symCube[j].eo)
-//             c.multiply(self)
-//             c.multiply(symCube[inv_idx[j]])
-//             if self == c:
-//                 s.append(j)
-//             c.inv_cubie_cube(d)
-//             if self == d:  # then we have antisymmetry
-//                 s.append(j + N_SYM)
-//         return s
-
 impl Cube {
+    /// This is pub(crate) to allow symmetries module to construct cubes
+    /// without externally exposing internal representation.
+    pub(crate) const fn from_arrays(
+        edge_perm: [usize; 12],
+        edge_orient: [u32; 12],
+        corner_perm: [usize; 8],
+        corner_orient: [u32; 8],
+    ) -> Self {
+        Cube {
+            edge_perm,
+            edge_orient,
+            corner_perm,
+            corner_orient,
+        }
+    }
+    
+    /// Samples a uniformly random cube state
     pub fn new_random(rng: &mut Rng) -> Self {
         let mut edge_permutation: [usize; 12] = random_permutation(rng);
         let corner_permutation: [usize; 8] = random_permutation(rng);
@@ -163,8 +146,8 @@ impl Cube {
             edge_permutation.swap(0, 1);
         }
 
-        let mut edge_orientations = (0..11).map(|_| rng.u32() % 2).collect::<Vec<_>>();
-        let mut corner_orientations = (0..7).map(|_| rng.u32() % 3).collect::<Vec<_>>();
+        let mut edge_orientations = (0..11).map(|_| rng.u32_range(2)).collect::<Vec<_>>();
+        let mut corner_orientations = (0..7).map(|_| rng.u32_range(3)).collect::<Vec<_>>();
         let edge_parity = edge_orientations.iter().sum::<u32>() % 2;
         let corner_parity = corner_orientations.iter().sum::<u32>() % 3;
         edge_orientations.push((2 - edge_parity) % 2);
@@ -181,7 +164,7 @@ impl Cube {
         cube
     }
     
-    pub fn new_solved() -> Self {
+    pub const fn new_solved() -> Self {
         Cube{
             edge_perm: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
             edge_orient: [0; 12],
@@ -190,51 +173,25 @@ impl Cube {
         }
     }
 
-    /// Create a cube from raw permutation and orientation arrays.
-    /// This is pub(crate) to allow the symmetries module to construct cubes
-    /// while keeping the internal representation hidden from external users.
-    pub(crate) const fn from_arrays(
-        edge_perm: [usize; 12],
-        edge_orient: [u32; 12],
-        corner_perm: [usize; 8],
-        corner_orient: [u32; 8],
-    ) -> Self {
-        Cube {
-            edge_perm,
-            edge_orient,
-            corner_perm,
-            corner_orient,
-        }
-    }
-
     #[inline]
     pub fn is_solved(&self) -> bool {
         return *self == Cube::new_solved();
     }
 
-    /// Multiply (compose) two cubes: self ∘ other
-    /// 
-    /// This applies the transformation represented by `other` first, then `self`.
-    /// In group theory notation: (self ∘ other)(x) = self(other(x))
-    /// 
-    /// Example: If `other` scrambles the cube and `self` is a symmetry,
-    /// the result is the scrambled cube after applying the symmetry.
-    pub fn multiply(&self, other: &Cube) -> Cube {
-        // Compose permutations
-        let edge_perm = compose_permutations(&self.edge_perm, &other.edge_perm);
-        let corner_perm = compose_permutations(&self.corner_perm, &other.corner_perm);
-        
-        // Compose edge orientations: add mod 2
-        // When composing, orientations add: result[i] = (self.orient[i] + other.orient[perm[i]]) % 2
+    /// Multiply (compose) two cubes
+    /// Using standard composition notation: multiply(cube2, cube1) = (cube2 ∘ cube1)(x) = cube2(cube1(x))
+    pub fn multiply(cube2: &Cube, cube1: &Cube) -> Cube {
+        let edge_perm = compose_permutations(&cube2.edge_perm, &cube1.edge_perm);
+        let corner_perm = compose_permutations(&cube2.corner_perm, &cube1.corner_perm);
+
         let mut edge_orient = [0u32; 12];
         for i in 0..12 {
-            edge_orient[i] = (self.edge_orient[i] + other.edge_orient[other.edge_perm[i]]) % 2;
+            edge_orient[i] = (cube1.edge_orient[i] + cube2.edge_orient[cube1.edge_perm[i]]) % 2;
         }
         
-        // Compose corner orientations: add mod 3
         let mut corner_orient = [0u32; 8];
         for i in 0..8 {
-            corner_orient[i] = (self.corner_orient[i] + other.corner_orient[other.corner_perm[i]]) % 3;
+            corner_orient[i] = (cube1.corner_orient[i] + cube2.corner_orient[cube1.corner_perm[i]]) % 3;
         }
         
         Cube {
