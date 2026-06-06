@@ -1,8 +1,10 @@
 # Functionality
 Symmetry reduction
-Add commented methods to Cube 
+Add inverse cube method
+Potentially make cube mul. repr. of moves
 Continuous solution improvement (keep searching for better solutions after first is found)
 Flat const arrays instead of 2D in math might be faster/better
+Solve multiple cubes simultaneously using inverse cube and the C3 symmetry
 
 # Overview
 ## Phase 1:

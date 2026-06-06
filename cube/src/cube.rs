@@ -1,5 +1,7 @@
+use std::ops::Mul;
+
 use crate::rng::{Rng, random_permutation};
-use crate::math::permutation_parity;
+use crate::math::{permutation_parity, permutation_inverse};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Edge {
@@ -178,6 +180,61 @@ impl Cube {
         true
     }
 
+    /// Multiply (compose) two cubes
+    /// Using standard composition notation: multiply(cube2, cube1) = (cube2 ∘ cube1)(x) = cube2(cube1(x))
+    /// Note: We store inverse permutations in the Cube struct, so composition of permutations is reversed
+    pub const fn multiply(cube2: &Cube, cube1: &Cube) -> Cube {
+        let mut edge_perm = [0usize; 12];
+        let mut edge_orient = [0u32; 12];
+        let mut i = 0;
+        while i < 12 {
+            edge_perm[i] = cube1.edge_perm[cube2.edge_perm[i]];
+            edge_orient[i] = (cube2.edge_orient[i] + cube1.edge_orient[cube2.edge_perm[i]]) % 2;
+            i += 1;
+        }
+
+        let mut corner_perm = [0usize; 8];
+        let mut corner_orient = [0u32; 8];
+        let mut i = 0;
+        while i < 8 {
+            corner_perm[i] = cube1.corner_perm[cube2.corner_perm[i]];
+            corner_orient[i] =
+                (cube2.corner_orient[i] + cube1.corner_orient[cube2.corner_perm[i]]) % 3;
+            i += 1;
+        }
+
+        Cube {
+            edge_perm,
+            edge_orient,
+            corner_perm,
+            corner_orient,
+        }
+    }
+
+    pub const fn inverse(cube: &Cube) -> Cube {
+        let edge_perm = permutation_inverse(&cube.edge_perm);
+        let corner_perm = permutation_inverse(&cube.corner_perm);
+        let mut edge_orient = [0u32; 12];
+        let mut corner_orient = [0u32; 8];
+        let mut i = 0;
+        while i < 12 {
+            edge_orient[i] = (2 - cube.edge_orient[edge_perm[i]]) % 2;
+            i += 1;
+        }
+        let mut i = 0;
+        while i < 8 {
+            corner_orient[i] = (3 - cube.corner_orient[corner_perm[i]]) % 3;
+            i += 1;
+        }
+
+        Cube {
+            edge_perm,
+            edge_orient,
+            corner_perm,
+            corner_orient,
+        }
+    }
+
     // Getters and setters
     #[inline]
     pub fn get_edge_orientation(&self, pos: Edge) -> u32 {
@@ -347,6 +404,14 @@ impl Cube {
     }
 }
 
+impl Mul for Cube {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Cube::multiply(&self, &rhs)
+    }
+}
+
 pub trait Moveable {
     fn turn(&mut self, mv: Move) -> &mut Self;
 
@@ -485,5 +550,16 @@ mod tests {
         
         cube.set_corner_orientation(Corner::URB, 2);
         assert_eq!(cube.get_corner_orientation(Corner::URB), 2);
+    }
+
+    #[test]
+    fn test_inverse() {
+        let mut rng = Rng::new();
+        for _ in 0..100 {
+            let cube = Cube::new_random(&mut rng);
+            let inverse = Cube::inverse(&cube);
+            let product = cube * inverse;
+            assert!(product.is_solved(), "Cube multiplied by its inverse should be solved");
+        }
     }
 }
