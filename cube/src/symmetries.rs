@@ -64,8 +64,8 @@ pub const GENERATOR_SIGMA: Symmetry = Symmetry {
 
 // These 4 generators have the special property that their cyclic subgroups
 // intersect only at the identity, and every symmetry can be uniquely expressed
-// as c3^i · c2^j · c4^k · σ^l where i,j,k,l range over each generator's order.
-// This gives exactly 3 × 2 × 4 × 2 = 48 unique symmetries (semidirect product).
+// as σ^l * c4^k * c2^j * c3^i where i,j,k,l range over each generator's order.
+// This gives exactly 2 * 4 * 2 * 3 = 48 unique symmetries (semidirect product).
 pub const GENERATORS: [Symmetry; 4] = [GENERATOR_C3, GENERATOR_C2, GENERATOR_C4, GENERATOR_SIGMA];
 pub const NUM_SYMMETRIES: usize = ORDER_C3 * ORDER_C2 * ORDER_C4 * ORDER_SIGMA;
 

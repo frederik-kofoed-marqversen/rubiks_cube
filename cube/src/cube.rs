@@ -181,7 +181,7 @@ impl Cube {
     }
 
     /// Multiply (compose) two cubes
-    /// Using standard composition notation: multiply(cube2, cube1) = (cube2 ∘ cube1)(x) = cube2(cube1(x))
+    /// Using standard composition notation: multiply(cube2, cube1)(x) = (cube2 ∘ cube1)(x) = cube2(cube1(x))
     /// Note: We store inverse permutations in the Cube struct, so composition of permutations is reversed
     pub const fn multiply(cube2: &Cube, cube1: &Cube) -> Cube {
         let mut edge_perm = [0usize; 12];
