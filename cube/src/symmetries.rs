@@ -137,6 +137,9 @@ impl Mul for Symmetry {
     }
 }
 
+#[allow(non_upper_case_globals)]
+pub const D4h_SYMMETRIES: [usize; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+
 pub const SYMMETRIES: [Symmetry; NUM_SYMMETRIES] = {
     let mut result = [IDENTITY; NUM_SYMMETRIES]; // ✓ Fixed
 

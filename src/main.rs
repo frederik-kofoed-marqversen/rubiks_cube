@@ -36,22 +36,22 @@ fn main() {
 
     // Kociemba's algorithm
     println!("\n--- Testing Kociemba's Algorithm ---");
-    // let tables = KociembaTables::load_or_build(KociembaTables::DEFAULT_PATH)
-        // .expect("Failed to initialize Kociemba tables");
-    let tables = KociembaTables::build();
-    let solver = KociembaSolver::new(tables);
+    let _tables = KociembaTables::load_or_build(KociembaTables::DEFAULT_PATH)
+        .expect("Failed to initialize Kociemba tables");
+    // let tables = KociembaTables::build();
+    // let solver = KociembaSolver::new(&tables);
     
-    for _ in 0..1 {
-        // let mut scrambled_cube = Cube::solved();
-        // scrambled_cube.apply_moves(&scramble);
-        let mut cube = Cube::new_random(&mut rng);
+    // for _ in 0..1 {
+    //     // let mut scrambled_cube = Cube::solved();
+    //     // scrambled_cube.apply_moves(&scramble);
+    //     let mut cube = Cube::new_random(&mut rng);
         
-        let solution = solver.solve(cube);
-        println!("Kociemba's solution: {} moves", solution.len());
+    //     let solution = solver.solve(cube);
+    //     println!("Kociemba's solution: {} moves", solution.len());
         
-        // Verify Kociemba solution
-        cube.apply_moves(&solution);
-        assert!(cube.is_solved());
-        println!("✓ Kociemba solved successfully!");
-    }
+    //     // Verify Kociemba solution
+    //     cube.apply_moves(&solution);
+    //     assert!(cube.is_solved());
+    //     println!("✓ Kociemba solved successfully!");
+    // }
 }
