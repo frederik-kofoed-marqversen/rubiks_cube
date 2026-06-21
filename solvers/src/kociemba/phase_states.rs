@@ -1,9 +1,11 @@
-use crate::kociemba::tables::MoveTables;
-
 use super::indexers::*;
 use super::tables::{IndexMoveTable, SymmetryConjugationTable, SymmetryReductionTable};
-use super::KociembaTables;
-use cube::{Cube, Move, Moveable, MOVES, EDGES};
+use super::tables::{MoveTables, SymmetryTables};
+use cube::symmetries::INV_INDEX_MAP;
+use cube::{Cube, Move, Moveable, EDGES, MOVES};
+
+pub const EOS_SYMMETRY_CLASSES: usize = 64350;
+pub const CP_SYMMETRY_CLASSES: usize = 2520;
 
 pub const MOVES_PHASE1: [Move; 18] = MOVES;
 pub const MOVES_PHASE2: [Move; 10] = [
@@ -69,21 +71,50 @@ impl<'a> Phase1State<'a> {
 pub struct Phase1Indexer<'a> {
     pub eos_reduction_table: &'a SymmetryReductionTable,
     pub co_symmetry_table: &'a SymmetryConjugationTable,
+    pub move_tables: &'a MoveTables,
+}
+
+impl<'a> Phase1Indexer<'a> {
+    pub fn new(move_tables: &'a MoveTables, sym_tables: &'a SymmetryTables) -> Self {
+        Self {
+            eos_reduction_table: &sym_tables.eos_reduction,
+            co_symmetry_table: &sym_tables.co_conjugation,
+            move_tables,
+        }
+    }
 }
 
 impl<'a> Indexer<Phase1State<'a>> for Phase1Indexer<'a> {
-    const SIZE: usize = 64350 * CornerOrientationIndexer::SIZE; // 64350 is the number of unique symmetry classes over the EOS index
+    const SIZE: usize = EOS_SYMMETRY_CLASSES * CornerOrientationIndexer::SIZE; // 64350 is the number of unique symmetry classes over the EOS index
     const SOLVED_INDEX: usize = 0;
 
     fn to_index(&self, state: &Phase1State<'a>) -> usize {
         let eos = EOSIndexer.to_index(&(state.eo, state.esc));
-        let (eos_class, sym) = self.eos_reduction_table.get(eos);
+        let (eos_class, sym) = self.eos_reduction_table.get_class(eos);
         let co_conj = self.co_symmetry_table.get(state.co, sym);
         eos_class * CornerOrientationIndexer::SIZE + co_conj
     }
 
-    fn from_index(&self, _index: usize) -> Phase1State<'a> {
-        unimplemented!("Phase1Indexer::from_index not needed for solving");
+    fn from_index(&self, index: usize) -> Phase1State<'a> {
+        let eos_class = index / CornerOrientationIndexer::SIZE;
+        let co_conj = index % CornerOrientationIndexer::SIZE;
+
+        let eos = self.eos_reduction_table.get_representative(eos_class);
+        let (eo, esc) = EOSIndexer.from_index(eos);
+
+        let (_, sym) = self.eos_reduction_table.get_class(eos);
+        let inv_sym = INV_INDEX_MAP[sym];
+        let co = self.co_symmetry_table.get(co_conj, inv_sym);
+
+        // co = co_conj because get_class on a representative returns the identity symmetry
+        Phase1State {
+            eo,
+            co,
+            esc,
+            eo_move_table: &self.move_tables.eo_move,
+            co_move_table: &self.move_tables.co_move,
+            esc_move_table: &self.move_tables.esc_move,
+        }
     }
 }
 
@@ -137,37 +168,80 @@ impl<'a> Phase2State<'a> {
 pub struct Phase2Indexer1<'a> {
     pub cp_reduction_table: &'a SymmetryReductionTable,
     pub ud_symmetry_table: &'a SymmetryConjugationTable,
+    pub move_tables: &'a MoveTables,
+}
+
+impl<'a> Phase2Indexer1<'a> {
+    pub fn new(move_tables: &'a MoveTables, sym_tables: &'a SymmetryTables) -> Self {
+        Self {
+            cp_reduction_table: &sym_tables.cp_reduction,
+            ud_symmetry_table: &sym_tables.ud_conjugation,
+            move_tables,
+        }
+    }
 }
 
 impl<'a> Indexer<Phase2State<'a>> for Phase2Indexer1<'a> {
-    const SIZE: usize = 2520 * UDEdgePermutationIndexer::SIZE; // 2520 is the number of unique symmetry classes over the CP index
+    const SIZE: usize = CP_SYMMETRY_CLASSES * UDEdgePermutationIndexer::SIZE; // 2520 is the number of unique symmetry classes over the CP index
     const SOLVED_INDEX: usize = 0; // TODO: Calculate actual solved index
 
     fn to_index(&self, state: &Phase2State<'a>) -> usize {
-        let (cp_class, sym) = self.cp_reduction_table.get(state.cp);
+        let (cp_class, sym) = self.cp_reduction_table.get_class(state.cp);
         let ud_conj = self.ud_symmetry_table.get(state.ud, sym);
         cp_class * UDEdgePermutationIndexer::SIZE + ud_conj
     }
 
-    fn from_index(&self, _index: usize) -> Phase2State<'a> {
-        unimplemented!("Phase2Indexer1::from_index is not implemented");
+    fn from_index(&self, index: usize) -> Phase2State<'a> {
+        let cp_class = index / UDEdgePermutationIndexer::SIZE;
+        let ud_conj = index % UDEdgePermutationIndexer::SIZE;
+        let cp = self.cp_reduction_table.get_representative(cp_class);
+
+        let (_, sym) = self.cp_reduction_table.get_class(cp);
+        let inv_sym = INV_INDEX_MAP[sym];
+        let ud = self.ud_symmetry_table.get(ud_conj, inv_sym);
+
+        // ud = ud_conj because get_class on a representative returns the identity symmetry
+        Phase2State {
+            cp,
+            ud,
+            esp: ESliceIndexer::SOLVED_INDEX,
+            cp_move_table: &self.move_tables.cp_move,
+            ud_move_table: &self.move_tables.ud_move,
+            esp_move_table: &self.move_tables.esp_move,
+        }
     }
 }
 
-
 #[derive(Clone, Copy)]
-pub struct Phase2Indexer2;
+pub struct Phase2Indexer2<'a> {
+    pub move_tables: &'a MoveTables,
+}
 
-impl<'a> Indexer<Phase2State<'a>> for Phase2Indexer2 {
-    const SIZE: usize = CornerPermutationIndexer::SIZE * UDEdgePermutationIndexer::SIZE;
+impl<'a> Phase2Indexer2<'a> {
+    pub fn new(move_tables: &'a MoveTables) -> Self {
+        Self { move_tables }
+    }
+}
+
+impl<'a> Indexer<Phase2State<'a>> for Phase2Indexer2<'a> {
+    const SIZE: usize = CornerPermutationIndexer::SIZE * ESlicePermutationIndexer::SIZE;
     const SOLVED_INDEX: usize = 0; // TODO: Calculate actual solved index
 
     fn to_index(&self, state: &Phase2State<'a>) -> usize {
         state.cp * ESlicePermutationIndexer::SIZE + state.esp
     }
 
-    fn from_index(&self, _index: usize) -> Phase2State<'a> {
-        unimplemented!("Phase2Indexer2::from_index is not implemented");
+    fn from_index(&self, index: usize) -> Phase2State<'a> {
+        let cp = index / ESlicePermutationIndexer::SIZE;
+        let esp = index % ESlicePermutationIndexer::SIZE;
+        Phase2State {
+            cp,
+            ud: UDEdgePermutationIndexer::SOLVED_INDEX,
+            esp,
+            cp_move_table: &self.move_tables.cp_move,
+            ud_move_table: &self.move_tables.ud_move,
+            esp_move_table: &self.move_tables.esp_move,
+        }
     }
 }
 
@@ -191,9 +265,9 @@ impl Indexer<Cube> for EOSIndexer {
         let (eo, esc) = self.from_index(index);
         let orientation_cube = EdgeOrientationIndexer.from_index(eo);
         let mut cube = ESliceCombinationIndexer.from_index(esc);
-        for edge in EDGES {
-            let orientation = orientation_cube.get_edge_orientation(edge);
-            cube.set_edge_orientation(edge, orientation);
+        for &position in EDGES.iter() {
+            let orientation = orientation_cube.get_edge_orientation(position);
+            cube.set_edge_orientation(position, orientation);
         }
         cube
     }
@@ -292,41 +366,19 @@ impl Indexer<(usize, usize)> for EOSIndexer {
 
 #[cfg(test)]
 mod tests {
+    use crate::test_indexer;
+
     use super::*;
-    use cube::Moveable;
     use std::sync::LazyLock;
 
-    static TABLES: LazyLock<MoveTables> = LazyLock::new(|| {
-        MoveTables::build()
-    });
-
-    #[test]
-    fn phase1_state_solved() {
-        let cube = Cube::new_solved();
-        let state = Phase1State::from_cube(&cube, &TABLES);
-        assert!(state.is_solved(), "Solved cube should be recognized as solved");
-    }
-
-    #[test]
-    fn phase1_state_turn() {
-        let cube = Cube::new_solved();
-        let mut state = Phase1State::from_cube(&cube, &TABLES);
-        state.turn(Move::R);
-        assert!(!state.is_solved(), "After R move, should not be solved");
-    }
-
-    #[test]
-    fn phase2_state_solved() {
-        let cube = Cube::new_solved();
-        let state = Phase2State::from_cube(&cube, &TABLES);
-        assert!(state.is_solved(), "Solved cube should be recognized as solved");
-    }
+    static MOVE_TABLES: LazyLock<MoveTables> = LazyLock::new(|| MoveTables::build());
+    static SYMMETRY_TABLES: LazyLock<SymmetryTables> = LazyLock::new(|| SymmetryTables::build());
+    static P1I: LazyLock<Phase1Indexer> = LazyLock::new(|| Phase1Indexer::new(&MOVE_TABLES, &SYMMETRY_TABLES));
+    static P2I1: LazyLock<Phase2Indexer1> = LazyLock::new(|| Phase2Indexer1::new(&MOVE_TABLES, &SYMMETRY_TABLES));
+    static P2I2: LazyLock<Phase2Indexer2> = LazyLock::new(|| Phase2Indexer2::new(&MOVE_TABLES));
     
-    #[test]
-    fn phase2_state_turn() {
-        let cube = Cube::new_solved();
-        let mut state = Phase2State::from_cube(&cube, &TABLES);
-        state.turn(Move::R2);
-        assert!(!state.is_solved(), "After R2 move, should not be solved");
-    }
+    test_indexer!(eos, EOSIndexer, EOSIndexer, Cube, Cube::new_solved());
+    test_indexer!(phase1, Phase1Indexer, &P1I, Phase1State, Phase1State::from_cube(&Cube::new_solved(), &MOVE_TABLES));
+    test_indexer!(phase2_1, Phase2Indexer1, &P2I1, Phase2State, Phase2State::from_cube(&Cube::new_solved(), &MOVE_TABLES));
+    test_indexer!(phase2_2, Phase2Indexer2, &P2I2, Phase2State, Phase2State::from_cube(&Cube::new_solved(), &MOVE_TABLES));
 }

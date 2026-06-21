@@ -393,44 +393,52 @@ impl Indexer<Cube> for UDEdgePermutationIndexer {
     }
 }
 
+#[macro_export]
+macro_rules! test_indexer {
+    ($mod_name:ident, $indexer_type:ty, $indexer:expr, $state_type:ty, $solved_state:expr) => {
+        mod $mod_name {
+            use super::*;
+
+            #[test]
+            fn solved_index() {
+                let indexer = $indexer;
+                assert_eq!(
+                    indexer.to_index(&$solved_state),
+                    <$indexer_type as Indexer<$state_type>>::SOLVED_INDEX
+                );
+            }
+
+            #[test]
+            fn consistency() {
+                const SIZE: usize = <$indexer_type as Indexer<$state_type>>::SIZE;
+                let indexer = $indexer;
+                let mut seen = vec![false; SIZE];
+                
+                for i in 0..SIZE {
+                    let state: $state_type = indexer.from_index(i);
+                    let j = indexer.to_index(&state);
+                    
+                    assert!(j < SIZE, "Index {} out of bounds for SIZE {}", j, SIZE);
+                    assert_eq!(i, j, "Failed for index {}", i);
+                    assert!(!seen[j], "Index {} produced twice", j);
+                    seen[j] = true;
+                }
+            }
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    macro_rules! test_indexer {
-        ($mod_name:ident, $indexer:path) => {
-            mod $mod_name {
-                use super::*;
-
-                #[test]
-                fn solved_index() {
-                    let indexer = $indexer;
-                    assert_eq!(
-                        indexer.to_index(&Cube::new_solved()),
-                        <$indexer as Indexer<Cube>>::SOLVED_INDEX
-                    );
-                }
-
-                #[test]
-                fn consistency() {
-                    let indexer = $indexer;
-                    for i in 0..<$indexer as Indexer<Cube>>::SIZE {
-                        let cube: Cube = indexer.from_index(i);
-                        let j = indexer.to_index(&cube);
-                        assert_eq!(i, j, "Failed for index {}", i);
-                    }
-                }
-            }
-        };
-    }
-
-    test_indexer!(eo, EdgeOrientationIndexer);
-    test_indexer!(co, CornerOrientationIndexer);
-    test_indexer!(cp, CornerPermutationIndexer);
-    test_indexer!(es, ESliceIndexer);
-    test_indexer!(ec, ESliceCombinationIndexer);
-    test_indexer!(ep, ESlicePermutationIndexer);
-    test_indexer!(ue, UEdgeIndexer);
-    test_indexer!(de, DEdgeIndexer);
-    test_indexer!(ude, UDEdgePermutationIndexer);
+    test_indexer!(eo, EdgeOrientationIndexer, EdgeOrientationIndexer, Cube, Cube::new_solved());
+    test_indexer!(co, CornerOrientationIndexer, CornerOrientationIndexer, Cube, Cube::new_solved());
+    test_indexer!(cp, CornerPermutationIndexer, CornerPermutationIndexer, Cube, Cube::new_solved());
+    test_indexer!(es, ESliceIndexer, ESliceIndexer, Cube, Cube::new_solved());
+    test_indexer!(esc, ESliceCombinationIndexer, ESliceCombinationIndexer, Cube, Cube::new_solved());
+    test_indexer!(esp, ESlicePermutationIndexer, ESlicePermutationIndexer, Cube, Cube::new_solved());
+    test_indexer!(ue, UEdgeIndexer, UEdgeIndexer, Cube, Cube::new_solved());
+    test_indexer!(de, DEdgeIndexer, DEdgeIndexer, Cube, Cube::new_solved());
+    test_indexer!(ude, UDEdgePermutationIndexer, UDEdgePermutationIndexer, Cube, Cube::new_solved());
 }

@@ -1,14 +1,14 @@
-use crate::kociemba::phase_states::{Phase1State, Phase2State};
-
 use super::indexers::*;
 use super::phase_states::{
-    EOSIndexer, Phase1Indexer, Phase2Indexer1, Phase2Indexer2, MOVES_PHASE1, MOVES_PHASE2,
+    EOSIndexer, Phase1Indexer, Phase2Indexer1, Phase2Indexer2, CP_SYMMETRY_CLASSES,
+    EOS_SYMMETRY_CLASSES, MOVES_PHASE1, MOVES_PHASE2,
 };
 use cube::math::update_distance_mod3;
 use cube::symmetries::D4h_SYMMETRIES;
 use cube::symmetries::{INV_INDEX_MAP, SYMMETRIES};
 use cube::{Cube, Move, Moveable, MOVES};
 use serde::{Deserialize, Serialize};
+use std::io::{self, Write};
 
 #[derive(Serialize, Deserialize)]
 pub struct IndexMoveTable {
@@ -48,49 +48,76 @@ impl IndexMoveTable {
 
 #[derive(Serialize, Deserialize)]
 pub struct SymmetryReductionTable {
-    data: Vec<(u16, u8)>,
+    symmetry_class_map: Vec<(u16, u8)>,
+    representatives_map: Vec<u32>,
 }
 
 impl SymmetryReductionTable {
     /// Given `index`, returns the index of its equivalence class and
     /// the symmetry that maps `index` to the class representative.
-    pub fn get(&self, index: usize) -> (usize, usize) {
-        let (class_index, sym_index) = self.data[index];
+    pub fn get_class(&self, index: usize) -> (usize, usize) {
+        let (class_index, sym_index) = self.symmetry_class_map[index];
         (class_index as usize, sym_index as usize)
     }
 
+    pub fn get_representative(&self, class_index: usize) -> usize {
+        self.representatives_map[class_index] as usize
+    }
+
     pub fn build<I: Indexer<Cube>>(indexer: I, symmetries: &[usize]) -> Self {
-        let mut data = vec![(u16::MAX, u8::MAX); I::SIZE];
-        let mut class_count = 0;
+        let mut symmetry_class_map = vec![(u16::MAX, u8::MAX); I::SIZE];
+        let mut representatives_map = Vec::new();
+        let mut class_index = 0;
 
         for base_index in 0..I::SIZE {
-            if data[base_index] != (u16::MAX, u8::MAX) {
+            assert!(
+                class_index < u16::MAX as usize,
+                "Too many symmetry classes to store as u16 (max {}, got {})",
+                u16::MAX,
+                class_index
+            );
+            assert!(
+                base_index < u32::MAX as usize,
+                "Not possible to store representatives as u32 (max {}, got {})",
+                u32::MAX,
+                base_index
+            );
+
+            if symmetry_class_map[base_index] != (u16::MAX, u8::MAX) {
+                // Already assigned to a class, skip
                 continue;
             }
 
             let base_cube = indexer.from_index(base_index);
 
+            representatives_map.push(base_index as u32);
+
             for &sym_index in symmetries {
                 let sym = SYMMETRIES[sym_index];
                 let cube = sym * base_cube;
                 let index = indexer.to_index(&cube);
-                let inv_sym_index = INV_INDEX_MAP[sym_index];
-                data[index] = (class_count as u16, inv_sym_index as u8);
+                if symmetry_class_map[index] == (u16::MAX, u8::MAX) {
+                    // This check is technically not needed, but it does guarantee that the
+                    // symmetry stored with the class representatives is the identity.
+                    let inv_sym_index = INV_INDEX_MAP[sym_index];
+                    symmetry_class_map[index] = (class_index as u16, inv_sym_index as u8);
+                }
             }
 
-            class_count += 1;
+            class_index += 1;
         }
+
         println!(
-            "    Reduction complete: {} total classes over {} states",
-            class_count,
-            I::SIZE
+            "    Reduction complete: {} unique classes over {} states (compression: {:.1}x, {:.2}% of original)",
+            class_index,
+            I::SIZE,
+            I::SIZE as f64 / class_index as f64,
+            class_index as f64 * 100.0 / I::SIZE as f64
         );
-        println!(
-            "    Compression ratio: {:.2} ({:.2}%)",
-            I::SIZE as f64 / class_count as f64,
-            class_count as f64 / I::SIZE as f64 * 100.0
-        );
-        Self { data }
+        Self {
+            symmetry_class_map,
+            representatives_map,
+        }
     }
 }
 
@@ -109,6 +136,13 @@ impl SymmetryConjugationTable {
     }
 
     pub fn build<I: Indexer<Cube>>(indexer: I, symmetries: &[usize]) -> Self {
+        assert!(
+            I::SIZE <= u16::MAX as usize,
+            "Indexer too large to store as u16 (max {}, got {})",
+            u16::MAX,
+            I::SIZE
+        );
+
         let mut data = vec![0; I::SIZE * symmetries.len()];
 
         let mut local_index = vec![None; 48];
@@ -163,105 +197,62 @@ impl PruningTable {
         self.data[u32_index] |= (val % 3) << bit_offset; // set the new value
     }
 
-    pub fn build_bfs<T: Moveable + Copy, I: Indexer<T>>(
-        solved: &T,
-        indexer: I,
-        moves: &[Move],
-    ) -> Self {
-        assert_eq!(
-            indexer.to_index(solved),
-            I::SOLVED_INDEX,
-            "Provided solved state does not match indexer SOLVED_INDEX"
-        );
-
-        let mut table = Self {
-            data: vec![0xFFFFFFFF; (I::SIZE >> 4) + 1],
-        }; // Initialize all entries to 3 (0b11)
-
-        let mut queue = std::collections::VecDeque::new();
-
-        // Starting from solved state.
-        table.set_mod3(I::SOLVED_INDEX, 0); // Distance to solved state is 0
-        queue.push_back(*solved);
-
-        let mut visited = 1;
-        while let Some(mut state) = queue.pop_front() {
-            let distance = table.get_mod3(indexer.to_index(&state));
-            for &mv in moves {
-                state.turn(mv);
-                let index = indexer.to_index(&state);
-                if table.get_mod3(index) == 3 {
-                    // Not visited yet, set distance and push to queue
-                    table.set_mod3(index, distance + 1);
-                    queue.push_back(state);
-                    visited += 1;
-
-                    if visited % (I::SIZE / 20) == 0 {
-                        // Log progress every ~5%
-                        let percent = (visited * 100) / I::SIZE;
-                        println!(
-                            "    Pruning BFS: {} states visited ({}%), queue: {}",
-                            visited,
-                            percent,
-                            queue.len()
-                        );
-                    }
-                }
-                state.turn(mv.inverse()); // Undo the move for next iteration
-            }
-        }
-        assert!(
-            visited == I::SIZE,
-            "Pruning BFS did not visit all states! Visited {visited} out of {}.",
-            I::SIZE
-        );
-        println!("    Pruning complete");
-
-        table
-    }
-
-    pub fn build<T: Moveable + Copy, I: Indexer<T>>(
-        solved: &T,
-        indexer: I,
-        moves: &[Move],
-    ) -> Self {
-        assert_eq!(
-            indexer.to_index(solved),
-            I::SOLVED_INDEX,
-            "Provided solved state does not match indexer SOLVED_INDEX"
-        );
-
+    pub fn build<T: Moveable + Copy, I: Indexer<T>>(indexer: I, moves: &[Move]) -> Self {
         let mut table = Self {
             data: vec![0xFFFFFFFF; (I::SIZE >> 4) + 1],
         }; // Initialize all entries to 3 (0b11)
 
         table.set_mod3(I::SOLVED_INDEX, 0);
 
-        let mut depth_mod3 = 1;
+        let mut depth = 1;
+        let mut mod3 = 1;
+        let mut prev_mod3 = 0;
         let mut visited = 1;
         while visited < I::SIZE {
-            for idx in 0..I::SIZE {
-                if table.get_mod3(idx) != 3 {
-                    // Already visited, skip
+            let mut idx = 0;
+            while idx < I::SIZE {
+                if idx % (I::SIZE / 10) == 0 || idx == I::SIZE {
+                    print!(
+                        "\r      Depth {:>2}: {:>3}% | Total: {:>5.1}% ({}/{})",
+                        depth,
+                        idx * 100 / I::SIZE,
+                        (visited * 1000 / I::SIZE) as f64 / 10.0,
+                        visited,
+                        I::SIZE
+                    );
+                    io::stdout().flush().unwrap();
+                }
+                
+                if table.data[idx >> 4] == 0xFFFFFFFF {
+                    idx += 16; // Skip 16 entries at once if all are unvisited
+                    continue;
+                }
+                if table.get_mod3(idx) != prev_mod3 {
+                    idx += 1;
                     continue;
                 }
 
+                // State was reached at previous depth. Update neighbours.
                 let state = indexer.from_index(idx);
-                let reachable = moves.iter().any(|&mv| {
+                for &mv in moves {
                     let mut next = state;
                     next.turn(mv);
                     let next_idx = indexer.to_index(&next);
-                    table.get_mod3(next_idx) != 3
-                });
-                if reachable {
-                    table.set_mod3(idx, depth_mod3);
-                    visited += 1;
-                    break;
+                    if table.get_mod3(next_idx) == 3 {
+                        table.set_mod3(next_idx, mod3);
+                        visited += 1;
+                    }
                 }
-            }
-            depth_mod3 = (depth_mod3 + 1) % 3;
-        }
 
+                idx += 1;
+            }
+
+
+            depth += 1;
+            prev_mod3 = mod3;
+            mod3 = depth % 3;
+        }
+        
         table
     }
 }
@@ -382,27 +373,29 @@ pub struct PruningTables {
 }
 
 impl PruningTables {
-    pub fn build(move_tables: &MoveTables, symmetry_tables: &SymmetryTables) -> Self {
+    pub fn build(move_tables: &MoveTables, sym_tables: &SymmetryTables) -> Self {
         println!("Building pruning tables...");
-        let solved_cube = Cube::new_solved();
-        let phase1_solved = Phase1State::from_cube(&solved_cube, move_tables);
-        let phase2_solved = Phase2State::from_cube(&solved_cube, move_tables);
-        let phase1_indexer = Phase1Indexer {
-            eos_reduction_table: &symmetry_tables.eos_reduction,
-            co_symmetry_table: &symmetry_tables.co_conjugation,
-        };
-        let phase2_indexer1 = Phase2Indexer1 {
-            cp_reduction_table: &symmetry_tables.cp_reduction,
-            ud_symmetry_table: &symmetry_tables.ud_conjugation,
-        };
-        let phase2_indexer2 = Phase2Indexer2;
+        let phase1_indexer = Phase1Indexer::new(move_tables, sym_tables);
+        let phase2_indexer1 = Phase2Indexer1::new(move_tables, sym_tables);
+        let phase2_indexer2 = Phase2Indexer2::new(move_tables);
+
+        assert_eq!(
+            sym_tables.eos_reduction.representatives_map.len(),
+            EOS_SYMMETRY_CLASSES,
+            "EOS reduction table has wrong number of classes"
+        );
+        assert_eq!(
+            sym_tables.cp_reduction.representatives_map.len(),
+            CP_SYMMETRY_CLASSES,
+            "CP reduction table has wrong number of classes"
+        );
 
         println!("  Building Phase 1 pruning table (this may take a while)...");
-        let phase1_prune = PruningTable::build(&phase1_solved, phase1_indexer, &MOVES_PHASE1);
-        println!("  Building Phase 2 pruning table 1 (CP×UD)...");
-        let phase2_prune1 = PruningTable::build(&phase2_solved, phase2_indexer1, &MOVES_PHASE2);
-        println!("  Building Phase 2 pruning table 2 (CP×ESP)...");
-        let phase2_prune2 = PruningTable::build(&phase2_solved, phase2_indexer2, &MOVES_PHASE2);
+        let phase1_prune = PruningTable::build(phase1_indexer, &MOVES_PHASE1);
+        println!("  Building Phase 2 pruning table 1 (CP*UD)...");
+        let phase2_prune1 = PruningTable::build(phase2_indexer1, &MOVES_PHASE2);
+        println!("  Building Phase 2 pruning table 2 (CP*ESP)...");
+        let phase2_prune2 = PruningTable::build(phase2_indexer2, &MOVES_PHASE2);
         println!("Pruning tables complete!");
 
         Self {
@@ -478,10 +471,8 @@ mod tests {
     use super::*;
     use std::sync::LazyLock;
 
-    static TABLES: LazyLock<KociembaTables> = LazyLock::new(|| {
-        KociembaTables::load_or_build(KociembaTables::DEFAULT_PATH)
-            .expect("Failed to load or build tables")
-    });
+    static MOVE_TABLES: LazyLock<MoveTables> = LazyLock::new(|| MoveTables::build());
+    static SYMMETRY_TABLES: LazyLock<SymmetryTables> = LazyLock::new(|| SymmetryTables::build());
 
     macro_rules! test_movetable {
         ($mod_name:ident, $indexer:path, $movepool:expr) => {
@@ -491,7 +482,7 @@ mod tests {
                 #[test]
                 fn consistency() {
                     let indexer = $indexer;
-                    let table = &TABLES.move_tables.$mod_name;
+                    let table = &MOVE_TABLES.$mod_name;
                     for idx1 in 0..<$indexer as Indexer<Cube>>::SIZE {
                         for mv in $movepool {
                             let mut state = indexer.from_index(idx1);
@@ -522,8 +513,8 @@ mod tests {
     test_movetable!(esc_move, ESliceCombinationIndexer, MOVES);
     test_movetable!(ue_move, UEdgeIndexer, MOVES);
     test_movetable!(de_move, DEdgeIndexer, MOVES);
-    test_movetable!(ud_move, UDEdgePermutationIndexer, MOVES);
-    test_movetable!(esp_move, ESlicePermutationIndexer, MOVES);
+    test_movetable!(ud_move, UDEdgePermutationIndexer, MOVES_PHASE2);
+    test_movetable!(esp_move, ESlicePermutationIndexer, MOVES_PHASE2);
 
     macro_rules! test_symmetry_reduction {
         ($mod_name:ident, $indexer:path, $symmetries:expr) => {
@@ -533,17 +524,18 @@ mod tests {
                 #[test]
                 fn consistency() {
                     let indexer = $indexer;
-                    let table = &TABLES.symmetry_tables.$mod_name;
+                    let table = &SYMMETRY_TABLES.$mod_name;
                     for idx in 0..<$indexer as Indexer<Cube>>::SIZE {
-                        let (class_idx, sym_idx) = table.get(idx);
+                        let (class_idx, sym_idx) = table.get_class(idx);
+                        let representative = table.get_representative(class_idx);
+
                         let cube: Cube = indexer.from_index(idx);
                         let sym = SYMMETRIES[sym_idx];
                         let reduced_cube = sym * cube;
-                        let reduced_idx = indexer.to_index(&reduced_cube);
+                        let reduced = indexer.to_index(&reduced_cube);
                         assert_eq!(
-                            reduced_idx, class_idx,
-                            "Symmetry reduction failed for index {}",
-                            idx
+                            reduced, representative,
+                            "Index {idx} was not reduced to its representative by the given symmetry",
                         );
                     }
                 }
@@ -551,15 +543,15 @@ mod tests {
                 #[test]
                 fn symmetry_invariance() {
                     let indexer = $indexer;
-                    let table = &TABLES.symmetry_tables.$mod_name;
+                    let table = &SYMMETRY_TABLES.$mod_name;
                     for idx in 0..<$indexer as Indexer<Cube>>::SIZE {
                         let cube: Cube = indexer.from_index(idx);
-                        let (class, _) = table.get(idx);
+                        let (class, _) = table.get_class(idx);
                         for &sym_index in $symmetries {
                             let sym = SYMMETRIES[sym_index];
                             let sym_cube = sym * cube;
                             let sym_idx = indexer.to_index(&sym_cube);
-                            let (class2, _) = table.get(sym_idx);
+                            let (class2, _) = table.get_class(sym_idx);
                             assert_eq!(
                                 class, class2,
                                 "Symmetry reduction should be invariant for symmetry index {}",
