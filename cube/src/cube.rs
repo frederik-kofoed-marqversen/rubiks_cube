@@ -100,7 +100,7 @@ impl Face {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cube {
     // Position-indexed arrays:
     // edge_perm[pos] = ID (0-11) of the piece currently at position pos

@@ -220,4 +220,18 @@ mod tests {
             assert_eq!(i, rank, "Combination rank/unrank mismatch for rank {}", i);
         }
     }
+
+    #[test]
+    fn test_update_distance_mod3() {
+        assert_eq!(update_distance_mod3(0, 0), 0);
+        assert_eq!(update_distance_mod3(0, 1), 1);
+        
+        for current in 1..10 {
+            for next in current-1..=current+1 {
+                let next_mod3 = next % 3;
+                let updated = update_distance_mod3(current, next_mod3);
+                assert_eq!(updated, next, "Distance update mismatch for current {} and next {}", current, next);
+            }
+        }
+    }
 }

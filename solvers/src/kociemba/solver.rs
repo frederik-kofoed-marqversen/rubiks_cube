@@ -99,10 +99,10 @@ impl SearchState for Phase2SearchState<'_> {
     }
 
     fn turn(&self, mv: Move) -> Self {
-        let idx1 = self.indexer1.to_index(&self.state);
-        let idx2 = self.indexer2.to_index(&self.state);
         let mut new_state = *self;
         new_state.state.turn(mv);
+        let idx1 = self.indexer1.to_index(&new_state.state);
+        let idx2 = self.indexer2.to_index(&new_state.state);
         new_state.distance1 = self.pruning_table1.get(idx1, self.distance1);
         new_state.distance2 = self.pruning_table2.get(idx2, self.distance2);
         new_state
@@ -120,7 +120,7 @@ impl<'a> KociembaSolver<'a> {
 }
 
 impl Solver for KociembaSolver<'_> {
-    fn solve(&self, scrambled_cube: Cube) -> Vec<Move> {
+    fn solve(&self, scrambled_cube: Cube) -> Option<Vec<Move>> {
         let solve_start = Instant::now();
         let mut cube = scrambled_cube;
 
@@ -133,6 +133,7 @@ impl Solver for KociembaSolver<'_> {
 
         // Apply phase 1 solution to cube to get new state for phase 2
         cube.apply_moves(&moves1);
+        assert!(Phase1State::from_cube(&cube, &self.tables.move_tables).is_solved());
 
         // Phase 2: Permute pieces to solved state
         let phase2_indexer1 =
@@ -145,7 +146,7 @@ impl Solver for KociembaSolver<'_> {
         // Return final solution
         let elapsed_time = solve_start.elapsed();
         println!("Solved in {:?}", elapsed_time);
-        [moves1, moves2].concat()
+        Some([moves1, moves2].concat())
     }
 
     fn name(&self) -> &str {

@@ -4,8 +4,8 @@ use super::tables::{MoveTables, SymmetryTables};
 use cube::symmetries::INV_INDEX_MAP;
 use cube::{Cube, Move, Moveable, EDGES, MOVES};
 
-pub const EOS_SYMMETRY_CLASSES: usize = 64350;
-pub const CP_SYMMETRY_CLASSES: usize = 2520;
+pub const EOS_SYMMETRY_CLASSES: usize = 64430;
+pub const CP_SYMMETRY_CLASSES: usize = 2768;
 
 pub const MOVES_PHASE1: [Move; 18] = MOVES;
 pub const MOVES_PHASE2: [Move; 10] = [
@@ -85,7 +85,7 @@ impl<'a> Phase1Indexer<'a> {
 }
 
 impl<'a> Indexer<Phase1State<'a>> for Phase1Indexer<'a> {
-    const SIZE: usize = EOS_SYMMETRY_CLASSES * CornerOrientationIndexer::SIZE; // 64350 is the number of unique symmetry classes over the EOS index
+    const SIZE: usize = EOS_SYMMETRY_CLASSES * CornerOrientationIndexer::SIZE;
     const SOLVED_INDEX: usize = 0;
 
     fn to_index(&self, state: &Phase1State<'a>) -> usize {
@@ -182,7 +182,7 @@ impl<'a> Phase2Indexer1<'a> {
 }
 
 impl<'a> Indexer<Phase2State<'a>> for Phase2Indexer1<'a> {
-    const SIZE: usize = CP_SYMMETRY_CLASSES * UDEdgePermutationIndexer::SIZE; // 2520 is the number of unique symmetry classes over the CP index
+    const SIZE: usize = CP_SYMMETRY_CLASSES * UDEdgePermutationIndexer::SIZE;
     const SOLVED_INDEX: usize = 0; // TODO: Calculate actual solved index
 
     fn to_index(&self, state: &Phase2State<'a>) -> usize {

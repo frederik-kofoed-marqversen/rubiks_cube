@@ -4,7 +4,7 @@ use super::phase_states::{
     EOS_SYMMETRY_CLASSES, MOVES_PHASE1, MOVES_PHASE2,
 };
 use cube::math::update_distance_mod3;
-use cube::symmetries::D4h_SYMMETRIES;
+use cube::symmetries::{D4h_SYMMETRIES, Symmetry};
 use cube::symmetries::{INV_INDEX_MAP, SYMMETRIES};
 use cube::{Cube, Move, Moveable, MOVES};
 use serde::{Deserialize, Serialize};
@@ -93,8 +93,7 @@ impl SymmetryReductionTable {
             representatives_map.push(base_index as u32);
 
             for &sym_index in symmetries {
-                let sym = SYMMETRIES[sym_index];
-                let cube = sym * base_cube;
+                let cube = Symmetry::cube_conjugation(&base_cube, sym_index);
                 let index = indexer.to_index(&cube);
                 if symmetry_class_map[index] == (u16::MAX, u8::MAX) {
                     // This check is technically not needed, but it does guarantee that the
@@ -154,8 +153,7 @@ impl SymmetryConjugationTable {
         for coord in 0..I::SIZE {
             let cube = indexer.from_index(coord);
             for (local_idx, &global_idx) in symmetries.iter().enumerate() {
-                let sym = SYMMETRIES[global_idx];
-                let conjugated = sym * cube;
+                let conjugated = Symmetry::cube_conjugation(&cube, global_idx);
                 data[coord * symmetries.len() + local_idx] = indexer.to_index(&conjugated) as u16;
             }
         }
@@ -213,16 +211,16 @@ impl PruningTable {
             while idx < I::SIZE {
                 if idx % (I::SIZE / 10) == 0 || idx == I::SIZE {
                     print!(
-                        "\r      Depth {:>2}: {:>3}% | Total: {:>5.1}% ({}/{})",
-                        depth,
-                        idx * 100 / I::SIZE,
+                        "\r      Total: {:>5.1}% ({}/{}) | Depth {:>2}: {:>3}%",
                         (visited * 1000 / I::SIZE) as f64 / 10.0,
                         visited,
-                        I::SIZE
+                        I::SIZE,
+                        depth,
+                        idx * 100 / I::SIZE,
                     );
                     io::stdout().flush().unwrap();
                 }
-                
+
                 if table.data[idx >> 4] == 0xFFFFFFFF {
                     idx += 16; // Skip 16 entries at once if all are unvisited
                     continue;
@@ -247,12 +245,13 @@ impl PruningTable {
                 idx += 1;
             }
 
-
             depth += 1;
             prev_mod3 = mod3;
             mod3 = depth % 3;
         }
-        
+        print!("\r      Total: {:>5.1}% ({}/{})", 100.0, I::SIZE, I::SIZE);
+        io::stdout().flush().unwrap();
+
         table
     }
 }
@@ -530,8 +529,7 @@ mod tests {
                         let representative = table.get_representative(class_idx);
 
                         let cube: Cube = indexer.from_index(idx);
-                        let sym = SYMMETRIES[sym_idx];
-                        let reduced_cube = sym * cube;
+                        let reduced_cube = Symmetry::cube_conjugation(&cube, sym_idx);
                         let reduced = indexer.to_index(&reduced_cube);
                         assert_eq!(
                             reduced, representative,
@@ -548,8 +546,7 @@ mod tests {
                         let cube: Cube = indexer.from_index(idx);
                         let (class, _) = table.get_class(idx);
                         for &sym_index in $symmetries {
-                            let sym = SYMMETRIES[sym_index];
-                            let sym_cube = sym * cube;
+                            let sym_cube = Symmetry::cube_conjugation(&cube, sym_index);
                             let sym_idx = indexer.to_index(&sym_cube);
                             let (class2, _) = table.get_class(sym_idx);
                             assert_eq!(

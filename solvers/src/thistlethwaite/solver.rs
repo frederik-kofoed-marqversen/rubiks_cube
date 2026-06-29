@@ -37,7 +37,7 @@ impl LookupTableSolver {
 }
 
 impl Solver for LookupTableSolver {
-    fn solve(&self, mut cube: Cube) -> Vec<Move> {
+    fn solve(&self, mut cube: Cube) -> Option<Vec<Move>> {
         let mut solution = Vec::new();
 
         solution.append(&mut self.solve_stage(&mut cube, &self.tables.g1));
@@ -45,7 +45,7 @@ impl Solver for LookupTableSolver {
         solution.append(&mut self.solve_stage(&mut cube, &self.tables.g3));
         solution.append(&mut self.solve_stage(&mut cube, &self.tables.g4));
 
-        solution
+        Some(solution)
     }
 
     fn name(&self) -> &str {
@@ -154,7 +154,7 @@ impl BDBFSSolver {
 }
 
 impl Solver for BDBFSSolver {
-    fn solve(&self, mut cube: Cube) -> Vec<Move> {
+    fn solve(&self, mut cube: Cube) -> Option<Vec<Move>> {
         let mut solution = Vec::new();
 
         solution.append(&mut Self::solve_stage::<G1>(&mut cube));
@@ -163,7 +163,7 @@ impl Solver for BDBFSSolver {
         solution.append(&mut Self::solve_stage::<G4>(&mut cube));
         solution.append(&mut Self::solve_stage::<G4>(&mut cube));
 
-        solution
+        Some(solution)
     }
 
     fn name(&self) -> &str {
@@ -209,7 +209,7 @@ impl BFSSolver {
 }
 
 impl Solver for BFSSolver {
-    fn solve(&self, mut cube: Cube) -> Vec<Move> {
+    fn solve(&self, mut cube: Cube) -> Option<Vec<Move>> {
         let mut solution = Vec::new();
 
         solution.append(&mut Self::solve_stage::<G1>(&mut cube));
@@ -218,7 +218,7 @@ impl Solver for BFSSolver {
         solution.append(&mut Self::solve_stage::<G4>(&mut cube));
         solution.append(&mut Self::solve_stage::<G4>(&mut cube));
 
-        solution
+        Some(solution)
     }
 
     fn name(&self) -> &str {

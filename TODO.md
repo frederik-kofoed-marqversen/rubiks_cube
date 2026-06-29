@@ -14,6 +14,7 @@ Potentially make cube mul. repr. of moves
 Flat const arrays instead of 2D in math might be faster/better
 
 # Cleanup
+Make all symmetry functions be based on index rather than actual symmetries, consider where conjugation should be placed and how casting between cube group G and full cube move/symetry group Γ should be handled
 Simplify indexer test macro
 Make trait CubeRepresentation wich is Moveable + from Cube - use that to get solved for PruneTable::build
 Properly compute phase state indexer SIZEs instead of hard coded 
@@ -21,6 +22,8 @@ Add more docstrings (phase indexers)
 Refactor and proper general implementation
 Unify the three 4-edge indexers to reduce code duplication
 Phase indexers can potentially get from_index implementations
+Make Thislewaithe use BFS solvers and Kociemba indexers and so on
+Add symmetry test where the known action of conjugation of move cubes is validated
 
 # Other comments
 

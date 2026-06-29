@@ -34,6 +34,10 @@ fn main() {
     // assert!(cube.is_solved());
     // println!("✓ Cube solved successfully!");
 
+    // // Build Kociemba tables
+    // let tables = KociembaTables::build();
+    // tables.save(KociembaTables::DEFAULT_PATH).expect("Failed to save Kociemba tables");
+
     // Kociemba's algorithm
     println!("\n--- Testing Kociemba's Algorithm ---");
     let tables = KociembaTables::load_or_build(KociembaTables::DEFAULT_PATH)
@@ -44,11 +48,18 @@ fn main() {
         let mut cube = Cube::new_random(&mut rng);
         
         let solution = solver.solve(cube);
-        println!("Kociemba's solution: {} moves", solution.len());
-        
-        // Verify Kociemba solution
-        cube.apply_moves(&solution);
-        assert!(cube.is_solved());
-        println!("✓ Kociemba solved successfully!");
+        match solution {
+            Some(moves) => {
+                println!("Kociemba's solution: {} moves", moves.len());
+                
+                // Verify Kociemba solution
+                cube.apply_moves(&moves);
+                assert!(cube.is_solved());
+                println!("✓ Kociemba solved successfully!");
+            },
+            None => {
+                println!("No solution found by Kociemba's algorithm.");
+            }
+        }
     }
 }

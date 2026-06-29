@@ -1,6 +1,6 @@
 use std::ops::Mul;
 
-use crate::cube::Cube;
+use super::Cube;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Symmetry {
@@ -69,34 +69,20 @@ pub const GENERATOR_SIGMA: Symmetry = Symmetry {
 pub const GENERATORS: [Symmetry; 4] = [GENERATOR_C3, GENERATOR_C2, GENERATOR_C4, GENERATOR_SIGMA];
 pub const NUM_SYMMETRIES: usize = ORDER_C3 * ORDER_C2 * ORDER_C4 * ORDER_SIGMA;
 
-impl Cube {
-    pub const fn apply_symmetry(&self, sym: &Symmetry) -> Cube {
-        let mut result = *self;
-        if sym.is_reflection {
+impl Symmetry {
+    pub const fn multiply(sym1: &Self, sym2: &Self) -> Self {
+        let mut new_transform = sym2.cube_transform;
+        if sym1.is_reflection {
             let mut i = 0;
             while i < 8 {
-                result.corner_orient[i] = (3 - result.corner_orient[i]) % 3;
+                new_transform.corner_orient[i] = (3 - new_transform.corner_orient[i]) % 3;
                 i += 1;
             }
         }
+        new_transform = Cube::multiply(&sym1.cube_transform, &new_transform);
 
-        result = Cube::multiply(&sym.cube_transform, &result);
-        result
-    }
-}
-
-impl Mul<Cube> for Symmetry {
-    type Output = Cube;
-
-    fn mul(self, rhs: Cube) -> Self::Output {
-        rhs.apply_symmetry(&self)
-    }
-}
-
-impl Symmetry {
-    pub const fn multiply(sym2: &Self, sym1: &Self) -> Self {
-        let new_transform = sym1.cube_transform.apply_symmetry(&sym2);
         let new_is_reflection = sym1.is_reflection ^ sym2.is_reflection;
+
         Self {
             cube_transform: new_transform,
             is_reflection: new_is_reflection,
@@ -127,6 +113,17 @@ impl Symmetry {
         }
         true
     }
+
+    pub fn cube_conjugation(cube: &Cube, sym_idx: usize) -> Cube {
+        let sym_cube = Symmetry {
+            cube_transform: *cube,
+            is_reflection: false,
+        };
+
+        let sym = SYMMETRIES[sym_idx];
+        let inv_sym = SYMMETRIES[INV_INDEX_MAP[sym_idx]];
+        (sym * sym_cube * inv_sym).cube_transform
+    }
 }
 
 impl Mul for Symmetry {
@@ -139,6 +136,10 @@ impl Mul for Symmetry {
 
 #[allow(non_upper_case_globals)]
 pub const D4h_SYMMETRIES: [usize; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+pub const INDEX_GENERATOR_SIGMA: usize = 1;
+pub const INDEX_GENERATOR_C4: usize = ORDER_SIGMA;
+pub const INDEX_GENERATOR_C2: usize = ORDER_C4 * ORDER_SIGMA;
+pub const INDEX_GENERATOR_C3: usize = ORDER_C2 * ORDER_C4 * ORDER_SIGMA;
 
 pub const SYMMETRIES: [Symmetry; NUM_SYMMETRIES] = {
     let mut result = [IDENTITY; NUM_SYMMETRIES]; // ✓ Fixed
@@ -217,38 +218,76 @@ pub const MULTIPLICATION_TABLE: [[usize; NUM_SYMMETRIES]; NUM_SYMMETRIES] = {
 
 #[cfg(test)]
 mod tests {
+    use super::super::Rng;
     use super::*;
 
     macro_rules! test_symmetry {
-        ($symmetry_name:ident, $generator:expr, $order:expr) => {
+        ($symmetry_name:ident, $sym:expr, $index:expr, $order:expr) => {
             mod $symmetry_name {
                 use super::*;
 
                 #[test]
-                fn test_symmetry() {
-                    let mut sym = $generator;
+                fn test_generator_index() {
+                    assert!(SYMMETRIES[$index] == $sym, "Generator index does not match expected symmetry");
+                }
+
+                #[test]
+                fn test_orbit() {
+                    let mut test = $sym;
                     for _ in 1..$order {
                         assert!(
-                            sym != IDENTITY,
+                            test != IDENTITY,
                             "Should not return to identity before {} applications",
                             $order
                         );
-                        sym = $generator * sym;
+                        test = $sym * test;
                     }
                     assert!(
-                        sym == IDENTITY,
+                        test == IDENTITY,
                         "Should return to identity after {} applications",
                         $order
                     );
+                }
+
+                #[test]
+                fn test_conjugation() {
+                    let solved = Cube::new_solved();
+                    let transformed = Symmetry::cube_conjugation(&solved, $index);
+                    assert!(
+                        transformed.is_solved(),
+                        "Conjugated solved cube should be solved"
+                    );
+
+                    let mut rng = Rng::with_seed(42);
+                    for _ in 0..1000 {
+                        let cube = Cube::new_random(&mut rng);
+                        let transformed = Symmetry::cube_conjugation(&cube, $index);
+                        assert!(transformed.is_valid(), "Conjugated cube should be valid");
+                    }
                 }
             }
         };
     }
 
-    test_symmetry!(c3, GENERATOR_C3, ORDER_C3);
-    test_symmetry!(c2, GENERATOR_C2, ORDER_C2);
-    test_symmetry!(c4, GENERATOR_C4, ORDER_C4);
-    test_symmetry!(sigma, GENERATOR_SIGMA, ORDER_SIGMA);
+    test_symmetry!(c3, GENERATOR_C3, INDEX_GENERATOR_C3, ORDER_C3);
+    test_symmetry!(c2, GENERATOR_C2, INDEX_GENERATOR_C2, ORDER_C2);
+    test_symmetry!(c4, GENERATOR_C4, INDEX_GENERATOR_C4, ORDER_C4);
+    test_symmetry!(sigma, GENERATOR_SIGMA, INDEX_GENERATOR_SIGMA, ORDER_SIGMA);
+
+    #[test]
+    fn test_uniqueness() {
+        let mut seen = Vec::new();
+        for (idx, &sym) in SYMMETRIES.iter().enumerate() {
+            for (prev_idx, prev_sym) in seen.iter() {
+                assert!(
+                    !sym.eq(prev_sym),
+                    "Symmetry {} is duplicate of symmetry {}", 
+                    idx, prev_idx
+                );
+            }
+            seen.push((idx, sym));
+        }
+    }
 
     #[test]
     fn test_inverses() {
