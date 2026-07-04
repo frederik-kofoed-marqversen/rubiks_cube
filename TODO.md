@@ -3,6 +3,8 @@
 Rewrite IDA* solver
 # Further work
 Use backwards search for prune table when half of states has been visited (search for non visited and check if they can be reached - current forwards is searching for already visited and then expanding from those)
+Make symmetry reduction tables always have identity symmetry for representatives! (optimisation/simplification)
+Don't store representatives map in symmetry tables. This is only used for pruning table building not during solving.
 Make UD move table using only phase 2 moves to save space
 Continuous solution improvement (keep searching for better solutions after first is found)
 Add inverse cube method

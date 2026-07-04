@@ -1,7 +1,6 @@
 use super::indexers::*;
-use super::tables::{IndexMoveTable, SymmetryConjugationTable, SymmetryReductionTable};
-use super::tables::{MoveTables, SymmetryTables};
-use cube::symmetries::INV_INDEX_MAP;
+use super::tables::{IndexMoveTable, SymmetryConjugationTable, SymmetryReductionTable, MoveTables, SymmetryTables};
+use cube::symmetries::{Symmetry, INV_INDEX_MAP, D4h_SYMMETRIES};
 use cube::{Cube, Move, Moveable, EDGES, MOVES};
 
 pub const EOS_SYMMETRY_CLASSES: usize = 64430;
@@ -363,6 +362,76 @@ impl Indexer<(usize, usize)> for EOSIndexer {
 //         unimplemented!("This is a helper struct for move tables and should not be used directly")
 //     }
 // }
+
+pub trait SymmetryReducedIndexer<T>: Indexer<T> {
+    fn equivalent_indices(&self, index: usize) -> impl Iterator<Item = usize>;
+}
+
+impl<'a> SymmetryReducedIndexer<Phase1State<'a>> for Phase1Indexer<'a> {
+    fn equivalent_indices(&self, index: usize) -> impl Iterator<Item = usize> {
+        let phase1state = self.from_index(index);
+        let co = phase1state.co;
+        let eos = EOSIndexer.to_index(&(phase1state.eo, phase1state.esc));
+        let eos_class = self.eos_reduction_table.get_class(eos).0;
+        
+        let mut stabilizers = Vec::with_capacity(D4h_SYMMETRIES.len());
+        for sym in D4h_SYMMETRIES {
+            let mut other = <EOSIndexer as Indexer<Cube>>::from_index(&EOSIndexer, eos);
+            other = Symmetry::cube_conjugation(&other, sym);
+            let eos2 = EOSIndexer.to_index(&other);
+            if eos2 == eos {
+                stabilizers.push(sym);
+            }
+        }
+
+        let mut indices = Vec::with_capacity(stabilizers.len());
+        for sym in stabilizers {
+            let co2 = self.co_symmetry_table.get(co, sym);
+            let index2 = eos_class * CornerOrientationIndexer::SIZE + co2;
+            if !indices.contains(&index2) {
+                indices.push(index2);
+            }
+        }
+
+        indices.into_iter()
+    }
+}
+
+impl<'a> SymmetryReducedIndexer<Phase2State<'a>> for Phase2Indexer1<'a> {
+    fn equivalent_indices(&self, index: usize) -> impl Iterator<Item = usize> {
+        let phase2state = self.from_index(index);
+        let ud = phase2state.ud;
+        let cp = phase2state.cp;
+        let cp_class = self.cp_reduction_table.get_class(cp).0;
+
+        let mut stabilizers = Vec::with_capacity(D4h_SYMMETRIES.len());
+        for sym in D4h_SYMMETRIES {
+            let mut other = <CornerPermutationIndexer as Indexer<Cube>>::from_index(&CornerPermutationIndexer, cp);
+            other = Symmetry::cube_conjugation(&other, sym);
+            let cp2 = CornerPermutationIndexer.to_index(&other);
+            if cp2 == cp {
+                stabilizers.push(sym);
+            }
+        }
+
+        let mut indices = Vec::with_capacity(stabilizers.len());
+        for sym in stabilizers {
+            let ud2 = self.ud_symmetry_table.get(ud, sym);
+            let index2 = cp_class * UDEdgePermutationIndexer::SIZE + ud2;
+            if !indices.contains(&index2) {
+                indices.push(index2);
+            }
+        }
+
+        indices.into_iter()
+    }
+}
+
+impl<'a> SymmetryReducedIndexer<Phase2State<'a>> for Phase2Indexer2<'a> {
+    fn equivalent_indices(&self, _index: usize) -> impl Iterator<Item = usize> {
+        Vec::new().into_iter()
+    }
+}
 
 #[cfg(test)]
 mod tests {

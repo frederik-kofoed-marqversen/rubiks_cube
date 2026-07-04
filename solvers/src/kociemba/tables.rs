@@ -2,6 +2,7 @@ use super::indexers::*;
 use super::phase_states::{
     EOSIndexer, Phase1Indexer, Phase2Indexer1, Phase2Indexer2, CP_SYMMETRY_CLASSES,
     EOS_SYMMETRY_CLASSES, MOVES_PHASE1, MOVES_PHASE2,
+    SymmetryReducedIndexer
 };
 use cube::math::update_distance_mod3;
 use cube::symmetries::{D4h_SYMMETRIES, Symmetry};
@@ -195,7 +196,7 @@ impl PruningTable {
         self.data[u32_index] |= (val % 3) << bit_offset; // set the new value
     }
 
-    pub fn build<T: Moveable + Copy, I: Indexer<T>>(indexer: I, moves: &[Move]) -> Self {
+    pub fn build_forwards<T: Moveable + Copy, I: Indexer<T> + SymmetryReducedIndexer<T>>(indexer: I, moves: &[Move]) -> Self {
         let mut table = Self {
             data: vec![0xFFFFFFFF; (I::SIZE >> 4) + 1],
         }; // Initialize all entries to 3 (0b11)
@@ -209,34 +210,39 @@ impl PruningTable {
         while visited < I::SIZE {
             let mut idx = 0;
             while idx < I::SIZE {
-                if idx % (I::SIZE / 10) == 0 || idx == I::SIZE {
+                if idx % (I::SIZE / 10) == 0 {
                     print!(
                         "\r      Total: {:>5.1}% ({}/{}) | Depth {:>2}: {:>3}%",
                         (visited * 1000 / I::SIZE) as f64 / 10.0,
                         visited,
                         I::SIZE,
                         depth,
-                        idx * 100 / I::SIZE,
+                        (idx * 100) / I::SIZE,
                     );
                     io::stdout().flush().unwrap();
                 }
 
-                if table.data[idx >> 4] == 0xFFFFFFFF {
-                    idx += 16; // Skip 16 entries at once if all are unvisited
-                    continue;
-                }
+                // if table.data[idx >> 4] == 0xFFFFFFFF {
+                //     idx += 16; // Skip 16 entries at once if all are unvisited
+                //     continue;
+                // }
                 if table.get_mod3(idx) != prev_mod3 {
                     idx += 1;
                     continue;
                 }
 
-                // State was reached at previous depth. Update neighbours.
+                // State has same distance mod 3 as previous depth -> maybe it was 
+                // actually reached at previous depth -> check neighbours.
                 let state = indexer.from_index(idx);
                 for &mv in moves {
                     let mut next = state;
                     next.turn(mv);
                     let next_idx = indexer.to_index(&next);
-                    if table.get_mod3(next_idx) == 3 {
+                    if table.get_mod3(next_idx) != 3 {
+                        continue; // Already visited
+                    }
+                    // Not visited yet -> Set distance mod 3 and mark as visited
+                    for next_idx in indexer.equivalent_indices(next_idx) {
                         table.set_mod3(next_idx, mod3);
                         visited += 1;
                     }
@@ -249,10 +255,69 @@ impl PruningTable {
             prev_mod3 = mod3;
             mod3 = depth % 3;
         }
-        print!("\r      Total: {:>5.1}% ({}/{})", 100.0, I::SIZE, I::SIZE);
-        io::stdout().flush().unwrap();
+        println!("\r      Total: {:>5.1}% ({}/{})", 100.0, I::SIZE, I::SIZE);
 
         table
+    }
+
+    pub fn build_backwards<T: Moveable + Copy, I: Indexer<T>>(indexer: I, moves: &[Move]) -> Self {
+        let mut table = Self {
+            data: vec![0xFFFFFFFF; (I::SIZE >> 4) + 1],
+        }; // Initialize all entries to 3 (0b11)
+
+        table.set_mod3(I::SOLVED_INDEX, 0);
+
+        let mut depth = 1;
+        let mut mod3 = 1;
+        let mut prev_mod3 = 0;
+        let mut visited = 1;
+        while visited < I::SIZE {
+            let mut idx = 0;
+            while idx < I::SIZE {
+                if idx % (I::SIZE / 10) == 0 {
+                    print!(
+                        "\r      Total: {:>5.1}% ({}/{}) | Depth {:>2}: {:>3}%",
+                        (visited * 1000 / I::SIZE) as f64 / 10.0,
+                        visited,
+                        I::SIZE,
+                        depth,
+                        (idx * 100) / I::SIZE,
+                    );
+                    io::stdout().flush().unwrap();
+                }
+
+                if table.get_mod3(idx) != 3 {
+                    idx += 1;
+                    continue;
+                }
+
+                // State has not been visited yet -> Check if it can be reached from a state at previous depth.
+                let state = indexer.from_index(idx);
+                for &mv in moves {
+                    let mut prev = state;
+                    prev.turn(mv);
+                    let prev_idx = indexer.to_index(&prev);
+                    if table.get_mod3(prev_idx) == prev_mod3 {
+                        table.set_mod3(prev_idx, mod3);
+                        visited += 1;
+                    }
+                }
+
+                idx += 1;
+            }
+
+            depth += 1;
+            prev_mod3 = mod3;
+            mod3 = depth % 3;
+        }
+        println!("\r      Total: {:>5.1}% ({}/{})", 100.0, I::SIZE, I::SIZE);
+
+        table
+    }
+
+    fn build<T: Moveable + Copy, I: Indexer<T> + SymmetryReducedIndexer<T>>(indexer: I, moves: &[Move]) -> Self {
+        // Self::build_backwards(indexer, moves)
+        Self::build_forwards(indexer, moves)
     }
 }
 
