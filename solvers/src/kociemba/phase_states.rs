@@ -1,7 +1,11 @@
 use super::indexers::*;
-use super::tables::{IndexMoveTable, SymmetryConjugationTable, SymmetryReductionTable, MoveTables, SymmetryTables};
-use cube::symmetries::{Symmetry, INV_INDEX_MAP, D4h_SYMMETRIES};
+use super::tables::{
+    IndexMoveTable, MoveTables, SymmetryConjugationTable, SymmetryReductionTable, SymmetryTables,
+};
+use cube::symmetries::{D4h_SYMMETRIES, Symmetry, INV_INDEX_MAP};
 use cube::{Cube, Move, Moveable, EDGES, MOVES};
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
 
 pub const EOS_SYMMETRY_CLASSES: usize = 64430;
 pub const CP_SYMMETRY_CLASSES: usize = 2768;
@@ -291,111 +295,50 @@ impl Indexer<(usize, usize)> for EOSIndexer {
     }
 }
 
-// struct MultiIndexer<I1: Indexer<Cube>, I2: Indexer<Cube>> {
-//     pub indexer1: I1,
-//     pub indexer2: I2,
-// }
-
-// impl<I1: Indexer<Cube>, I2: Indexer<Cube>> Indexer<Cube> for MultiIndexer<I1, I2> {
-//     const SIZE: usize = I1::SIZE * I2::SIZE;
-//     const SOLVED_INDEX: usize = I1::SOLVED_INDEX * I2::SIZE + I2::SOLVED_INDEX;
-
-//     fn to_index(&self, cube: &Cube) -> usize {
-//         let idx1 = self.indexer1.to_index(cube);
-//         let idx2 = self.indexer2.to_index(cube);
-//         idx1 * I2::SIZE + idx2
-//     }
-
-//     fn from_index(&self, _index: usize) -> Cube {
-//         unimplemented!("MultiIndexer::from_index is not well defined");
-//     }
-// }
-
-// impl<I1: Indexer<Cube>, I2: Indexer<Cube>> Indexer<(usize, usize)> for MultiIndexer<I1, I2> {
-//     const SIZE: usize = I1::SIZE * I2::SIZE;
-//     const SOLVED_INDEX: usize = I1::SOLVED_INDEX * I2::SIZE + I2::SOLVED_INDEX;
-
-//     fn to_index(&self, state: &(usize, usize)) -> usize {
-//         let idx1 = state.0;
-//         let idx2 = state.1;
-//         idx1 * I2::SIZE + idx2
-//     }
-
-//     fn from_index(&self, index: usize) -> (usize, usize) {
-//         let idx1 = index / I2::SIZE;
-//         let idx2 = index % I2::SIZE;
-//         (idx1, idx2)
-//     }
-// }
-
-// pub type EOSIndexer = MultiIndexer<EdgeOrientationIndexer, ESliceIndexer>;
-
-// #[derive(Clone, Copy)]
-// pub struct IndexedState<'a> {
-//     idx: usize,
-//     table: &'a IndexMoveTable,
-// }
-
-// impl<'a> IndexedState<'a> {
-//     pub fn new(idx: usize, table: &'a IndexMoveTable) -> Self {
-//         Self { idx, table }
-//     }
-// }
-
-// // Impls for simple implementation and testing
-// impl Moveable for IndexedState<'_> {
-//     fn turn(&mut self, mv: Move) -> &mut Self {
-//         self.idx = self.table.get(self.idx, mv);
-//         self
-//     }
-// }
-
-// impl<T: Indexer<Cube>> Indexer<IndexedState<'_>> for T {
-//     const SIZE: usize = T::SIZE;
-//     const SOLVED_INDEX: usize = T::SOLVED_INDEX;
-
-//     fn to_index(&self, state: &IndexedState) -> usize {
-//         state.idx
-//     }
-
-//     fn from_index(&self, _idx: usize) -> IndexedState<'static> {
-//         unimplemented!("This is a helper struct for move tables and should not be used directly")
-//     }
-// }
-
 pub trait SymmetryReducedIndexer<T>: Indexer<T> {
     fn equivalent_indices(&self, index: usize) -> impl Iterator<Item = usize>;
 }
 
+static EOS_STABILIZER_CACHE: LazyLock<Mutex<HashMap<usize, u16>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 impl<'a> SymmetryReducedIndexer<Phase1State<'a>> for Phase1Indexer<'a> {
     fn equivalent_indices(&self, index: usize) -> impl Iterator<Item = usize> {
-        let phase1state = self.from_index(index);
-        let co = phase1state.co;
-        let eos = EOSIndexer.to_index(&(phase1state.eo, phase1state.esc));
-        let eos_class = self.eos_reduction_table.get_class(eos).0;
-        
-        let mut stabilizers = Vec::with_capacity(D4h_SYMMETRIES.len());
-        for sym in D4h_SYMMETRIES {
-            let mut other = <EOSIndexer as Indexer<Cube>>::from_index(&EOSIndexer, eos);
-            other = Symmetry::cube_conjugation(&other, sym);
-            let eos2 = EOSIndexer.to_index(&other);
-            if eos2 == eos {
-                stabilizers.push(sym);
-            }
-        }
+        let co = index % CornerOrientationIndexer::SIZE;
+        let eos_class = index / CornerOrientationIndexer::SIZE;
 
-        let mut indices = Vec::with_capacity(stabilizers.len());
-        for sym in stabilizers {
+        let stabiliser_mask = *EOS_STABILIZER_CACHE
+            .lock()
+            .unwrap()
+            .entry(eos_class)
+            .or_insert_with(|| {
+                let eos = self.eos_reduction_table.get_representative(eos_class);
+                let mut mask = 0;
+                for sym in D4h_SYMMETRIES {
+                    let mut other = <EOSIndexer as Indexer<Cube>>::from_index(&EOSIndexer, eos);
+                    other = Symmetry::cube_conjugation(&other, sym);
+                    let eos2 = EOSIndexer.to_index(&other);
+                    if eos2 == eos {
+                        mask |= 1 << sym;
+                    }
+                }
+                mask
+            });
+
+        let mut indices = Vec::with_capacity(D4h_SYMMETRIES.len());
+        for sym in (0..D4h_SYMMETRIES.len()).filter(|&s| stabiliser_mask & (1 << s) != 0) {
             let co2 = self.co_symmetry_table.get(co, sym);
             let index2 = eos_class * CornerOrientationIndexer::SIZE + co2;
             if !indices.contains(&index2) {
                 indices.push(index2);
             }
         }
-
         indices.into_iter()
     }
 }
+
+static CP_STABILIZER_CACHE: LazyLock<Mutex<HashMap<usize, u16>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 impl<'a> SymmetryReducedIndexer<Phase2State<'a>> for Phase2Indexer1<'a> {
     fn equivalent_indices(&self, index: usize) -> impl Iterator<Item = usize> {
@@ -404,25 +347,35 @@ impl<'a> SymmetryReducedIndexer<Phase2State<'a>> for Phase2Indexer1<'a> {
         let cp = phase2state.cp;
         let cp_class = self.cp_reduction_table.get_class(cp).0;
 
-        let mut stabilizers = Vec::with_capacity(D4h_SYMMETRIES.len());
-        for sym in D4h_SYMMETRIES {
-            let mut other = <CornerPermutationIndexer as Indexer<Cube>>::from_index(&CornerPermutationIndexer, cp);
-            other = Symmetry::cube_conjugation(&other, sym);
-            let cp2 = CornerPermutationIndexer.to_index(&other);
-            if cp2 == cp {
-                stabilizers.push(sym);
-            }
-        }
+        let stabiliser_mask = *CP_STABILIZER_CACHE
+            .lock()
+            .unwrap()
+            .entry(cp_class)
+            .or_insert_with(|| {
+                let cp = self.cp_reduction_table.get_representative(cp_class);
+                let mut mask = 0;
+                for sym in D4h_SYMMETRIES {
+                    let mut other = <CornerPermutationIndexer as Indexer<Cube>>::from_index(
+                        &CornerPermutationIndexer,
+                        cp,
+                    );
+                    other = Symmetry::cube_conjugation(&other, sym);
+                    let cp2 = CornerPermutationIndexer.to_index(&other);
+                    if cp2 == cp {
+                        mask |= 1 << sym;
+                    }
+                }
+                mask
+            });
 
-        let mut indices = Vec::with_capacity(stabilizers.len());
-        for sym in stabilizers {
+        let mut indices = Vec::with_capacity(D4h_SYMMETRIES.len());
+        for sym in (0..D4h_SYMMETRIES.len()).filter(|&s| stabiliser_mask & (1 << s) != 0) {
             let ud2 = self.ud_symmetry_table.get(ud, sym);
             let index2 = cp_class * UDEdgePermutationIndexer::SIZE + ud2;
             if !indices.contains(&index2) {
                 indices.push(index2);
             }
         }
-
         indices.into_iter()
     }
 }
@@ -442,12 +395,32 @@ mod tests {
 
     static MOVE_TABLES: LazyLock<MoveTables> = LazyLock::new(|| MoveTables::build());
     static SYMMETRY_TABLES: LazyLock<SymmetryTables> = LazyLock::new(|| SymmetryTables::build());
-    static P1I: LazyLock<Phase1Indexer> = LazyLock::new(|| Phase1Indexer::new(&MOVE_TABLES, &SYMMETRY_TABLES));
-    static P2I1: LazyLock<Phase2Indexer1> = LazyLock::new(|| Phase2Indexer1::new(&MOVE_TABLES, &SYMMETRY_TABLES));
+    static P1I: LazyLock<Phase1Indexer> =
+        LazyLock::new(|| Phase1Indexer::new(&MOVE_TABLES, &SYMMETRY_TABLES));
+    static P2I1: LazyLock<Phase2Indexer1> =
+        LazyLock::new(|| Phase2Indexer1::new(&MOVE_TABLES, &SYMMETRY_TABLES));
     static P2I2: LazyLock<Phase2Indexer2> = LazyLock::new(|| Phase2Indexer2::new(&MOVE_TABLES));
-    
+
     test_indexer!(eos, EOSIndexer, EOSIndexer, Cube, Cube::new_solved());
-    test_indexer!(phase1, Phase1Indexer, &P1I, Phase1State, Phase1State::from_cube(&Cube::new_solved(), &MOVE_TABLES));
-    test_indexer!(phase2_1, Phase2Indexer1, &P2I1, Phase2State, Phase2State::from_cube(&Cube::new_solved(), &MOVE_TABLES));
-    test_indexer!(phase2_2, Phase2Indexer2, &P2I2, Phase2State, Phase2State::from_cube(&Cube::new_solved(), &MOVE_TABLES));
+    test_indexer!(
+        phase1,
+        Phase1Indexer,
+        &P1I,
+        Phase1State,
+        Phase1State::from_cube(&Cube::new_solved(), &MOVE_TABLES)
+    );
+    test_indexer!(
+        phase2_1,
+        Phase2Indexer1,
+        &P2I1,
+        Phase2State,
+        Phase2State::from_cube(&Cube::new_solved(), &MOVE_TABLES)
+    );
+    test_indexer!(
+        phase2_2,
+        Phase2Indexer2,
+        &P2I2,
+        Phase2State,
+        Phase2State::from_cube(&Cube::new_solved(), &MOVE_TABLES)
+    );
 }

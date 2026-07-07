@@ -1,15 +1,26 @@
 use super::indexers::*;
 use super::phase_states::{
-    EOSIndexer, Phase1Indexer, Phase2Indexer1, Phase2Indexer2, CP_SYMMETRY_CLASSES,
-    EOS_SYMMETRY_CLASSES, MOVES_PHASE1, MOVES_PHASE2,
-    SymmetryReducedIndexer
+    EOSIndexer, Phase1Indexer, Phase2Indexer1, Phase2Indexer2, SymmetryReducedIndexer,
+    CP_SYMMETRY_CLASSES, EOS_SYMMETRY_CLASSES, MOVES_PHASE1, MOVES_PHASE2,
 };
 use cube::math::update_distance_mod3;
-use cube::symmetries::{D4h_SYMMETRIES, Symmetry};
-use cube::symmetries::{INV_INDEX_MAP, SYMMETRIES};
+use cube::symmetries::{D4h_SYMMETRIES, Symmetry, INV_INDEX_MAP};
 use cube::{Cube, Move, Moveable, MOVES};
 use serde::{Deserialize, Serialize};
-use std::io::{self, Write};
+use std::io::Write;
+
+macro_rules! log {
+    ($($arg:tt)*) => {{
+        eprint!("\r{}", format!($($arg)*));
+        std::io::stderr().flush().unwrap();
+    }};
+}
+
+macro_rules! logln {
+    ($($arg:tt)*) => {{
+        eprintln!("\r{}", format!($($arg)*));
+    }};
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct IndexMoveTable {
@@ -107,7 +118,7 @@ impl SymmetryReductionTable {
             class_index += 1;
         }
 
-        println!(
+        logln!(
             "    Reduction complete: {} unique classes over {} states (compression: {:.1}x, {:.2}% of original)",
             class_index,
             I::SIZE,
@@ -196,128 +207,136 @@ impl PruningTable {
         self.data[u32_index] |= (val % 3) << bit_offset; // set the new value
     }
 
-    pub fn build_forwards<T: Moveable + Copy, I: Indexer<T> + SymmetryReducedIndexer<T>>(indexer: I, moves: &[Move]) -> Self {
+    fn expand_forwards<T: Moveable + Copy, I: Indexer<T> + SymmetryReducedIndexer<T>>(
+        indexer: &I,
+        moves: &[Move],
+        table: &mut Self,
+        depth: u32,
+        progress: &dyn Fn(usize, usize) -> (),
+    ) -> usize {
+        let mut visited = 0;
+        let prev_mod3 = (depth - 1) % 3;
+        let mod3 = depth % 3;
+
+        let mut idx = 0;
+        while idx < I::SIZE {
+            progress(idx, visited);
+
+            if table.data[idx >> 4] == 0xFFFFFFFF {
+                idx += 16; // Skip 16 entries at once if all are unvisited
+                continue;
+            }
+            if table.get_mod3(idx) != prev_mod3 {
+                idx += 1;
+                continue;
+            }
+
+            // State has same distance mod 3 as previous depth -> try to expand
+            let state = indexer.from_index(idx);
+            for &mv in moves {
+                let mut next = state;
+                next.turn(mv);
+                let next_idx = indexer.to_index(&next);
+                if table.get_mod3(next_idx) != 3 {
+                    continue; // Already visited
+                }
+                // Not visited yet -> Set distance mod 3 and mark as visited
+                for next_idx in indexer.equivalent_indices(next_idx) {
+                    table.set_mod3(next_idx, mod3);
+                    visited += 1;
+                }
+            }
+            idx += 1;
+        }
+
+        visited
+    }
+
+    fn expand_backwards<T: Moveable + Copy, I: Indexer<T>>(
+        indexer: &I,
+        moves: &[Move],
+        table: &mut Self,
+        depth: u32,
+        progress: &dyn Fn(usize, usize) -> (),
+    ) -> usize {
+        let mut visited = 0;
+        let prev_mod3 = (depth - 1) % 3;
+        let mod3 = depth % 3;
+
+        for idx in 0..I::SIZE {
+            progress(idx, visited);
+
+            if table.get_mod3(idx) != 3 {
+                continue;
+            }
+
+            // State has not been visited yet -> Check if it can be reached from a state at previous depth.
+            let state = indexer.from_index(idx);
+            for &mv in moves {
+                let mut prev = state;
+                prev.turn(mv);
+                let prev_idx = indexer.to_index(&prev);
+                if table.get_mod3(prev_idx) == prev_mod3 {
+                    table.set_mod3(idx, mod3);
+                    visited += 1;
+                    break;
+                }
+            }
+        }
+
+        visited
+    }
+
+    fn build<T: Moveable + Copy, I: Indexer<T> + SymmetryReducedIndexer<T>>(
+        indexer: I,
+        moves: &[Move],
+        switch: u32,
+    ) -> Self {
         let mut table = Self {
             data: vec![0xFFFFFFFF; (I::SIZE >> 4) + 1],
         }; // Initialize all entries to 3 (0b11)
-
         table.set_mod3(I::SOLVED_INDEX, 0);
 
-        let mut depth = 1;
-        let mut mod3 = 1;
-        let mut prev_mod3 = 0;
         let mut visited = 1;
+        let mut depth = 0;
+
         while visited < I::SIZE {
-            let mut idx = 0;
-            while idx < I::SIZE {
+            depth += 1;
+
+            let progress = |idx: usize, depth_visited: usize| {
                 if idx % (I::SIZE / 10) == 0 {
-                    print!(
-                        "\r      Total: {:>5.1}% ({}/{}) | Depth {:>2}: {:>3}%",
-                        (visited * 1000 / I::SIZE) as f64 / 10.0,
-                        visited,
+                    let total_visited = visited + depth_visited;
+                    log!(
+                        "      Total: {:>5.1}% ({}/{}) | Depth {:>2}: {:>3}%",
+                        (total_visited * 1000 / I::SIZE) as f64 / 10.0,
+                        total_visited,
                         I::SIZE,
                         depth,
                         (idx * 100) / I::SIZE,
                     );
-                    io::stdout().flush().unwrap();
                 }
+            };
 
-                // if table.data[idx >> 4] == 0xFFFFFFFF {
-                //     idx += 16; // Skip 16 entries at once if all are unvisited
-                //     continue;
-                // }
-                if table.get_mod3(idx) != prev_mod3 {
-                    idx += 1;
-                    continue;
-                }
-
-                // State has same distance mod 3 as previous depth -> maybe it was 
-                // actually reached at previous depth -> check neighbours.
-                let state = indexer.from_index(idx);
-                for &mv in moves {
-                    let mut next = state;
-                    next.turn(mv);
-                    let next_idx = indexer.to_index(&next);
-                    if table.get_mod3(next_idx) != 3 {
-                        continue; // Already visited
-                    }
-                    // Not visited yet -> Set distance mod 3 and mark as visited
-                    for next_idx in indexer.equivalent_indices(next_idx) {
-                        table.set_mod3(next_idx, mod3);
-                        visited += 1;
-                    }
-                }
-
-                idx += 1;
+            let depth_start = std::time::Instant::now();
+            if depth < switch {
+                visited += Self::expand_forwards(&indexer, moves, &mut table, depth, &progress);
+            } else {
+                visited += Self::expand_backwards(&indexer, moves, &mut table, depth, &progress);
             }
+            let depth_time = depth_start.elapsed();
 
-            depth += 1;
-            prev_mod3 = mod3;
-            mod3 = depth % 3;
+            logln!(
+                "    Depth {:>2} complete: {:>5.2}s {}, visited: {}/{} ({:.1}%)",
+                depth,
+                depth_time.as_secs_f64(),
+                if depth < switch { "(forwards)" } else { "(backwards)" },
+                visited,
+                I::SIZE,
+                (visited * 1000 / I::SIZE) as f64 / 10.0
+            );
         }
-        println!("\r      Total: {:>5.1}% ({}/{})", 100.0, I::SIZE, I::SIZE);
 
-        table
-    }
-
-    pub fn build_backwards<T: Moveable + Copy, I: Indexer<T>>(indexer: I, moves: &[Move]) -> Self {
-        let mut table = Self {
-            data: vec![0xFFFFFFFF; (I::SIZE >> 4) + 1],
-        }; // Initialize all entries to 3 (0b11)
-
-        table.set_mod3(I::SOLVED_INDEX, 0);
-
-        let mut depth = 1;
-        let mut mod3 = 1;
-        let mut prev_mod3 = 0;
-        let mut visited = 1;
-        while visited < I::SIZE {
-            let mut idx = 0;
-            while idx < I::SIZE {
-                if idx % (I::SIZE / 10) == 0 {
-                    print!(
-                        "\r      Total: {:>5.1}% ({}/{}) | Depth {:>2}: {:>3}%",
-                        (visited * 1000 / I::SIZE) as f64 / 10.0,
-                        visited,
-                        I::SIZE,
-                        depth,
-                        (idx * 100) / I::SIZE,
-                    );
-                    io::stdout().flush().unwrap();
-                }
-
-                if table.get_mod3(idx) != 3 {
-                    idx += 1;
-                    continue;
-                }
-
-                // State has not been visited yet -> Check if it can be reached from a state at previous depth.
-                let state = indexer.from_index(idx);
-                for &mv in moves {
-                    let mut prev = state;
-                    prev.turn(mv);
-                    let prev_idx = indexer.to_index(&prev);
-                    if table.get_mod3(prev_idx) == prev_mod3 {
-                        table.set_mod3(prev_idx, mod3);
-                        visited += 1;
-                    }
-                }
-
-                idx += 1;
-            }
-
-            depth += 1;
-            prev_mod3 = mod3;
-            mod3 = depth % 3;
-        }
-        println!("\r      Total: {:>5.1}% ({}/{})", 100.0, I::SIZE, I::SIZE);
-
-        table
-    }
-
-    fn build<T: Moveable + Copy, I: Indexer<T> + SymmetryReducedIndexer<T>>(indexer: I, moves: &[Move]) -> Self {
-        // Self::build_backwards(indexer, moves)
-        Self::build_forwards(indexer, moves)
+        return table;
     }
 }
 
@@ -361,29 +380,28 @@ pub struct MoveTables {
 
 impl MoveTables {
     pub fn build() -> Self {
-        println!("Building move tables...");
-        println!("  Building EO move table...");
+        logln!("Building move tables");
+        log!("[1/8] Building EO move table");
         let eo_move = IndexMoveTable::build::<Cube, EdgeOrientationIndexer>(EdgeOrientationIndexer);
-        println!("  Building CO move table...");
+        log!("[2/8] Building CO move table");
         let co_move =
             IndexMoveTable::build::<Cube, CornerOrientationIndexer>(CornerOrientationIndexer);
-        println!("  Building CP move table...");
+        log!("[3/8] Building CP move table");
         let cp_move =
             IndexMoveTable::build::<Cube, CornerPermutationIndexer>(CornerPermutationIndexer);
-        println!("  Building ESC move table...");
+        log!("[4/8] Building ESC move table");
         let esc_move =
             IndexMoveTable::build::<Cube, ESliceCombinationIndexer>(ESliceCombinationIndexer);
-        println!("  Building UE move table...");
+        log!("[5/8] Building UE move table");
         let ue_move = IndexMoveTable::build::<Cube, UEdgeIndexer>(UEdgeIndexer);
-        println!("  Building DE move table...");
+        log!("[6/8] Building DE move table");
         let de_move = IndexMoveTable::build::<Cube, DEdgeIndexer>(DEdgeIndexer);
-        println!("  Building UD move table...");
+        log!("[7/8] Building UD move table");
         let ud_move =
             IndexMoveTable::build::<Cube, UDEdgePermutationIndexer>(UDEdgePermutationIndexer);
-        println!("  Building ESP move table...");
+        log!("[8/8] Building ESP move table");
         let esp_move =
             IndexMoveTable::build::<Cube, ESlicePermutationIndexer>(ESlicePermutationIndexer);
-        println!("Move tables complete!");
 
         Self {
             eo_move,
@@ -408,18 +426,17 @@ pub struct SymmetryTables {
 
 impl SymmetryTables {
     pub fn build() -> Self {
-        println!("Building symmetry tables...");
-        println!("  Building EOS reduction table...");
+        logln!("Building symmetry tables");
+        log!("[1/4] Building EOS reduction table");
         let eos_reduction = SymmetryReductionTable::build(EOSIndexer, &D4h_SYMMETRIES);
-        println!("  Building CO conjugation table...");
+        log!("[2/4] Building CO conjugation table");
         let co_conjugation =
             SymmetryConjugationTable::build(CornerOrientationIndexer, &D4h_SYMMETRIES);
-        println!("  Building CP reduction table...");
+        log!("[3/4] Building CP reduction table");
         let cp_reduction = SymmetryReductionTable::build(CornerPermutationIndexer, &D4h_SYMMETRIES);
-        println!("  Building UD conjugation table...");
+        log!("[4/4] Building UD conjugation table");
         let ud_conjugation =
             SymmetryConjugationTable::build(UDEdgePermutationIndexer, &D4h_SYMMETRIES);
-        println!("Symmetry tables complete!");
         Self {
             eos_reduction,
             co_conjugation,
@@ -438,7 +455,7 @@ pub struct PruningTables {
 
 impl PruningTables {
     pub fn build(move_tables: &MoveTables, sym_tables: &SymmetryTables) -> Self {
-        println!("Building pruning tables...");
+        logln!("Building pruning tables (this may take a while)");
         let phase1_indexer = Phase1Indexer::new(move_tables, sym_tables);
         let phase2_indexer1 = Phase2Indexer1::new(move_tables, sym_tables);
         let phase2_indexer2 = Phase2Indexer2::new(move_tables);
@@ -454,13 +471,13 @@ impl PruningTables {
             "CP reduction table has wrong number of classes"
         );
 
-        println!("  Building Phase 1 pruning table (this may take a while)...");
-        let phase1_prune = PruningTable::build(phase1_indexer, &MOVES_PHASE1);
-        println!("  Building Phase 2 pruning table 1 (CP*UD)...");
-        let phase2_prune1 = PruningTable::build(phase2_indexer1, &MOVES_PHASE2);
-        println!("  Building Phase 2 pruning table 2 (CP*ESP)...");
-        let phase2_prune2 = PruningTable::build(phase2_indexer2, &MOVES_PHASE2);
-        println!("Pruning tables complete!");
+        logln!("[1/3] Building Phase 1 pruning table (EO*CO*ES)");
+        let phase1_prune = PruningTable::build(phase1_indexer, &MOVES_PHASE1, 10);
+        logln!("[2/3] Building Phase 2 pruning table 1 (CP*UD)");
+        let phase2_prune1 = PruningTable::build(phase2_indexer1, &MOVES_PHASE2, 14);
+        logln!("[3/3] Building Phase 2 pruning table 2 (CP*ESP)");
+        let phase2_prune2 = PruningTable::build(phase2_indexer2, &MOVES_PHASE2, 0);
+        logln!("");
 
         Self {
             phase1_prune,
@@ -481,14 +498,14 @@ impl KociembaTables {
     pub const DEFAULT_PATH: &'static str = "target/kociemba_tables.bin";
 
     pub fn build() -> Self {
-        println!("\n=== Building Kociemba Tables ===");
+        logln!("\n=== Building Kociemba Tables ===");
         let start = std::time::Instant::now();
 
         let move_tables = MoveTables::build();
         let symmetry_tables = SymmetryTables::build();
         let pruning_tables = PruningTables::build(&move_tables, &symmetry_tables);
 
-        println!(
+        logln!(
             "\nAll tables built in {:.2}s\n",
             start.elapsed().as_secs_f64()
         );
@@ -518,14 +535,14 @@ impl KociembaTables {
     }
 
     pub fn save(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Saving tables to {}...", path);
+        logln!("Saving tables to {}...", path);
         if let Some(parent) = std::path::Path::new(path).parent() {
             std::fs::create_dir_all(parent)?;
         }
         let file = std::fs::File::create(path)?;
         let writer = std::io::BufWriter::new(file);
         bincode::serialize_into(writer, self)?;
-        println!("Tables saved successfully!");
+        logln!("Tables saved successfully!");
         Ok(())
     }
 }
