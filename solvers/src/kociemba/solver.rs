@@ -128,7 +128,7 @@ impl Solver for KociembaSolver<'_> {
         let phase1_indexer =
             Phase1Indexer::new(&self.tables.move_tables, &self.tables.symmetry_tables);
         let state = Phase1SearchState::new(&cube, phase1_indexer, &self.tables);
-        let moves1 = ida_star(state, 20, &MOVES_PHASE1, &self.tables);
+        let moves1 = iddfs(state, 20, &MOVES_PHASE1, &self.tables);
         println!("Phase 1 complete: {} moves", moves1.len());
 
         // Apply phase 1 solution to cube to get new state for phase 2
@@ -140,7 +140,7 @@ impl Solver for KociembaSolver<'_> {
             Phase2Indexer1::new(&self.tables.move_tables, &self.tables.symmetry_tables);
         let phase2_indexer2 = Phase2Indexer2::new(&self.tables.move_tables);
         let state = Phase2SearchState::new(&cube, phase2_indexer1, phase2_indexer2, &self.tables);
-        let moves2 = ida_star(state, 18, &MOVES_PHASE2, &self.tables);
+        let moves2 = iddfs(state, 18, &MOVES_PHASE2, &self.tables);
         println!("Phase 2 complete: {} moves", moves2.len());
 
         // Return final solution
@@ -154,7 +154,7 @@ impl Solver for KociembaSolver<'_> {
     }
 }
 
-pub fn ida_star<S: SearchState>(
+pub fn iddfs<S: SearchState>(
     start: S,
     max_depth: u32,
     moves: &[Move],
@@ -171,7 +171,7 @@ pub fn ida_star<S: SearchState>(
         }
 
         let mut path = Vec::new();
-        if _ida_star(start, 0, bound, &mut path, moves, tables) {
+        if _iddfs(start, 0, bound, &mut path, moves, tables) {
             return path;
         }
 
@@ -179,7 +179,7 @@ pub fn ida_star<S: SearchState>(
     }
 }
 
-fn _ida_star<S: SearchState>(
+fn _iddfs<S: SearchState>(
     state: S,
     depth: u32,
     bound: u32,
@@ -202,7 +202,7 @@ fn _ida_star<S: SearchState>(
 
         let next_state = state.turn(mv);
         path.push(mv);
-        if _ida_star(next_state, depth + 1, bound, path, moves, tables) {
+        if _iddfs(next_state, depth + 1, bound, path, moves, tables) {
             return true;
         }
         path.pop();

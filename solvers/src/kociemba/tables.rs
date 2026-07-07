@@ -241,6 +241,7 @@ impl PruningTable {
                     continue; // Already visited
                 }
                 // Not visited yet -> Set distance mod 3 and mark as visited
+                // (Equivalent indices not an optimisation but critical for correctness)
                 for next_idx in indexer.equivalent_indices(next_idx) {
                     table.set_mod3(next_idx, mod3);
                     visited += 1;
