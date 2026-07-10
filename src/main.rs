@@ -4,7 +4,7 @@ extern crate solvers;
 use cube::{Cube, Rng, Moveable};
 use solvers::Solver;
 // use solvers::thistlethwaite::{LookupTableSolver, ThistlethwaiteTables, BFSSolver, BDBFSSolver};
-use solvers::kociemba::{KociembaSolver, KociembaTables};
+use solvers::kociemba::{KociembaSolver, KociembaTables, SearchContext};
 // use cube::Move::*;
 
 fn main() {
@@ -44,22 +44,16 @@ fn main() {
         .expect("Failed to initialize Kociemba tables");
     let solver = KociembaSolver::new(&tables);
     
+    let timeout = std::time::Duration::from_secs_f32(0.001);
     for _ in 0..10 {
         let mut cube = Cube::new_random(&mut rng);
         
-        let solution = solver.solve(cube);
-        match solution {
-            Some(moves) => {
-                println!("Kociemba's solution: {} moves", moves.len());
-                
-                // Verify Kociemba solution
-                cube.apply_moves(&moves);
-                assert!(cube.is_solved());
-                println!("✓ Kociemba solved successfully!");
-            },
-            None => {
-                println!("No solution found by Kociemba's algorithm.");
-            }
-        }
+        let ctx = SearchContext::new(cube, Some(timeout));
+        let solution = solver.run(ctx);
+        let moves = solution.expect("No solution found by Kociemba's algorithm.");
+        
+        cube.apply_moves(&moves);
+        assert!(cube.is_solved());
+        println!("Cube solved in {} moves!", moves.len());
     }
 }

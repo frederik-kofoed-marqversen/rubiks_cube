@@ -7,3 +7,4 @@ mod phase_states;
 
 pub use tables::KociembaTables;
 pub use solver::KociembaSolver;
+pub use solver::SearchContext;
