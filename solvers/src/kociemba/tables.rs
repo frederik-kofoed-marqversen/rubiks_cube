@@ -4,7 +4,7 @@ use super::phase_states::{
     CP_SYMMETRY_CLASSES, EOS_SYMMETRY_CLASSES, MOVES_PHASE1, MOVES_PHASE2,
 };
 use cube::math::update_distance_mod3;
-use cube::symmetries::{D4h_SYMMETRIES, Symmetry, INV_INDEX_MAP};
+use cube::symmetries::{Symmetry, NUM_SYMMETRIES, D4h_SYMMETRIES, IDENTITY};
 use cube::{Cube, Move, Moveable, MOVES};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
@@ -67,16 +67,27 @@ pub struct SymmetryReductionTable {
 impl SymmetryReductionTable {
     /// Given `index`, returns the index of its equivalence class and
     /// the symmetry that maps `index` to the class representative.
-    pub fn get_class(&self, index: usize) -> (usize, usize) {
-        let (class_index, sym_index) = self.symmetry_class_map[index];
-        (class_index as usize, sym_index as usize)
+    pub fn get_class(&self, index: usize) -> (usize, Symmetry) {
+        let (class_index, sym) = self.symmetry_class_map[index];
+        (class_index as usize, Symmetry::from_u8_unchecked(sym))
     }
 
     pub fn get_representative(&self, class_index: usize) -> usize {
         self.representatives_map[class_index] as usize
     }
 
-    pub fn build<I: Indexer<Cube>>(indexer: I, symmetries: &[usize]) -> Self {
+    pub fn build<I: Indexer<Cube>>(indexer: I, symmetries: &[Symmetry]) -> Self {
+        assert!(
+            symmetries.contains(&IDENTITY),
+            "Symmetries must contain identity"
+        );
+        assert!(
+            symmetries
+                .iter()
+                .all(|&s| symmetries.contains(&s.inverse())),
+            "Symmetries must contain all inverses"
+        );
+
         let mut symmetry_class_map = vec![(u16::MAX, u8::MAX); I::SIZE];
         let mut representatives_map = Vec::new();
         let mut class_index = 0;
@@ -104,16 +115,13 @@ impl SymmetryReductionTable {
 
             representatives_map.push(base_index as u32);
 
-            for &sym_index in symmetries {
-                let cube = Symmetry::cube_conjugation(&base_cube, sym_index);
+            for &sym in symmetries {
+                let cube = Symmetry::cube_conjugation(&base_cube, sym);
                 let index = indexer.to_index(&cube);
-                if symmetry_class_map[index] == (u16::MAX, u8::MAX) {
-                    // This check is technically not needed, but it does guarantee that the
-                    // symmetry stored with the class representatives is the identity.
-                    let inv_sym_index = INV_INDEX_MAP[sym_index];
-                    symmetry_class_map[index] = (class_index as u16, inv_sym_index as u8);
-                }
+                symmetry_class_map[index] = (class_index as u16, sym.inverse().index() as u8);
             }
+            // Ensure representative is marked with identity
+            symmetry_class_map[base_index] = (class_index as u16, IDENTITY.index() as u8);
 
             class_index += 1;
         }
@@ -141,12 +149,12 @@ pub struct SymmetryConjugationTable {
 
 impl SymmetryConjugationTable {
     #[inline]
-    pub fn get(&self, index: usize, mut sym_index: usize) -> usize {
-        sym_index = self.local_index[sym_index].expect("Symmetry not in this table") as usize;
+    pub fn get(&self, index: usize, sym: Symmetry) -> usize {
+        let sym_index = self.local_index[sym.index()].expect("Symmetry not in this table") as usize;
         self.data[index * self.num_symmetries + sym_index] as usize
     }
 
-    pub fn build<I: Indexer<Cube>>(indexer: I, symmetries: &[usize]) -> Self {
+    pub fn build<I: Indexer<Cube>>(indexer: I, symmetries: &[Symmetry]) -> Self {
         assert!(
             I::SIZE <= u16::MAX as usize,
             "Indexer too large to store as u16 (max {}, got {})",
@@ -156,16 +164,16 @@ impl SymmetryConjugationTable {
 
         let mut data = vec![0; I::SIZE * symmetries.len()];
 
-        let mut local_index = vec![None; 48];
-        for (local_idx, &global_idx) in symmetries.iter().enumerate() {
-            local_index[global_idx] = Some(local_idx as u8);
+        let mut local_index = vec![None; NUM_SYMMETRIES];
+        for (local_idx, &sym) in symmetries.iter().enumerate() {
+            local_index[sym.index()] = Some(local_idx as u8);
         }
 
         // Build conjugation table
         for coord in 0..I::SIZE {
             let cube = indexer.from_index(coord);
-            for (local_idx, &global_idx) in symmetries.iter().enumerate() {
-                let conjugated = Symmetry::cube_conjugation(&cube, global_idx);
+            for (local_idx, &sym) in symmetries.iter().enumerate() {
+                let conjugated = Symmetry::cube_conjugation(&cube, sym);
                 data[coord * symmetries.len() + local_idx] = indexer.to_index(&conjugated) as u16;
             }
         }
@@ -330,7 +338,11 @@ impl PruningTable {
                 "    Depth {:>2} complete: {:>5.2}s {}, visited: {}/{} ({:.1}%)",
                 depth,
                 depth_time.as_secs_f64(),
-                if depth < switch { "(forwards)" } else { "(backwards)" },
+                if depth < switch {
+                    "(forwards)"
+                } else {
+                    "(backwards)"
+                },
                 visited,
                 I::SIZE,
                 (visited * 1000 / I::SIZE) as f64 / 10.0
@@ -628,14 +640,14 @@ mod tests {
                     for idx in 0..<$indexer as Indexer<Cube>>::SIZE {
                         let cube: Cube = indexer.from_index(idx);
                         let (class, _) = table.get_class(idx);
-                        for &sym_index in $symmetries {
-                            let sym_cube = Symmetry::cube_conjugation(&cube, sym_index);
+                        for &sym in $symmetries {
+                            let sym_cube = Symmetry::cube_conjugation(&cube, sym);
                             let sym_idx = indexer.to_index(&sym_cube);
                             let (class2, _) = table.get_class(sym_idx);
                             assert_eq!(
                                 class, class2,
                                 "Symmetry reduction should be invariant for symmetry index {}",
-                                sym_index
+                                sym.index()
                             );
                         }
                     }

@@ -2,7 +2,7 @@ use super::indexers::*;
 use super::tables::{
     IndexMoveTable, MoveTables, SymmetryConjugationTable, SymmetryReductionTable, SymmetryTables,
 };
-use cube::symmetries::{D4h_SYMMETRIES, Symmetry, INV_INDEX_MAP};
+use cube::symmetries::{D4h_SYMMETRIES, Symmetry};
 use cube::{Cube, Move, Moveable, EDGES, MOVES};
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
@@ -105,14 +105,10 @@ impl<'a> Indexer<Phase1State<'a>> for Phase1Indexer<'a> {
         let eos = self.eos_reduction_table.get_representative(eos_class);
         let (eo, esc) = EOSIndexer.from_index(eos);
 
-        let (_, sym) = self.eos_reduction_table.get_class(eos);
-        let inv_sym = INV_INDEX_MAP[sym];
-        let co = self.co_symmetry_table.get(co_conj, inv_sym);
-
         // co = co_conj because get_class on a representative returns the identity symmetry
         Phase1State {
             eo,
-            co,
+            co: co_conj,
             esc,
             eo_move_table: &self.move_tables.eo_move,
             co_move_table: &self.move_tables.co_move,
@@ -199,14 +195,10 @@ impl<'a> Indexer<Phase2State<'a>> for Phase2Indexer1<'a> {
         let ud_conj = index % UDEdgePermutationIndexer::SIZE;
         let cp = self.cp_reduction_table.get_representative(cp_class);
 
-        let (_, sym) = self.cp_reduction_table.get_class(cp);
-        let inv_sym = INV_INDEX_MAP[sym];
-        let ud = self.ud_symmetry_table.get(ud_conj, inv_sym);
-
         // ud = ud_conj because get_class on a representative returns the identity symmetry
         Phase2State {
             cp,
-            ud,
+            ud: ud_conj,
             esp: ESliceIndexer::SOLVED_INDEX,
             cp_move_table: &self.move_tables.cp_move,
             ud_move_table: &self.move_tables.ud_move,
@@ -319,14 +311,14 @@ impl<'a> SymmetryReducedIndexer<Phase1State<'a>> for Phase1Indexer<'a> {
                     other = Symmetry::cube_conjugation(&other, sym);
                     let eos2 = EOSIndexer.to_index(&other);
                     if eos2 == eos {
-                        mask |= 1 << sym;
+                        mask |= 1 << sym.index();
                     }
                 }
                 mask
             });
 
         let mut indices = Vec::with_capacity(D4h_SYMMETRIES.len());
-        for sym in (0..D4h_SYMMETRIES.len()).filter(|&s| stabiliser_mask & (1 << s) != 0) {
+        for &sym in D4h_SYMMETRIES.iter().filter(|&s| stabiliser_mask & (1 << s.index()) != 0) {
             let co2 = self.co_symmetry_table.get(co, sym);
             let index2 = eos_class * CornerOrientationIndexer::SIZE + co2;
             if !indices.contains(&index2) {
@@ -362,14 +354,14 @@ impl<'a> SymmetryReducedIndexer<Phase2State<'a>> for Phase2Indexer1<'a> {
                     other = Symmetry::cube_conjugation(&other, sym);
                     let cp2 = CornerPermutationIndexer.to_index(&other);
                     if cp2 == cp {
-                        mask |= 1 << sym;
+                        mask |= 1 << sym.index();
                     }
                 }
                 mask
             });
 
         let mut indices = Vec::with_capacity(D4h_SYMMETRIES.len());
-        for sym in (0..D4h_SYMMETRIES.len()).filter(|&s| stabiliser_mask & (1 << s) != 0) {
+        for &sym in D4h_SYMMETRIES.iter().filter(|&s| stabiliser_mask & (1 << s.index()) != 0) {
             let ud2 = self.ud_symmetry_table.get(ud, sym);
             let index2 = cp_class * UDEdgePermutationIndexer::SIZE + ud2;
             if !indices.contains(&index2) {
